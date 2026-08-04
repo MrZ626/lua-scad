@@ -4,6 +4,7 @@ local ins, rem, concat = table.insert, table.remove, table.concat
 
 ---@alias SCAD.Vec2 { [1]: number, [2]: number }
 ---@alias SCAD.Vec3 { [1]: number, [2]: number, [3]: number }
+---@alias SCAD.FragOptions { fa?: number, fs?: number, fn?: number }
 
 ---@alias SCAD.enum.Shape 'cube' | 'square' | 'cylinder' | 'sphere' | 'circle' | 'text' | 'polygon' | 'polyhedron' | 'import' | 'surface'
 ---@alias SCAD.enum.Calculate 'union' | 'difference' | 'intersection' | 'hull' | 'minkowski'
@@ -44,6 +45,12 @@ end
 local function c_fn(v, n, f)
     assert(type(v) == 'number' and v >= 0 and v % 1 == 0,
         format("%s: %s must be a non-negative integer, got %s", f, what(n), tostring(v)))
+end
+local function c_frag(v, n, f)
+    assert(type(v) == 'table', format("%s: %s must be a table, got %s", f, what(n), type(v)))
+    if v.fa ~= nil then c_size(v.fa, 'fa', f) end
+    if v.fs ~= nil then c_size(v.fs, 'fs', f) end
+    if v.fn ~= nil then c_fn(v.fn, 'fn', f) end
 end
 local function c_str(v, n, f)
     assert(type(v) == 'string', format("%s: %s must be a string, got %s", f, what(n), type(v)))
@@ -302,13 +309,13 @@ function SCAD.square(w, l, c)
 end
 
 ---@param r number radius
----@param fn? number
+---@param frag? SCAD.FragOptions
 ---@return SCAD.Node
-function SCAD.circle(r, fn)
+function SCAD.circle(r, frag)
     c_size(r, 1, 'circle')
-    if fn ~= nil then c_fn(fn, 2, 'circle') end
+    if frag ~= nil then c_frag(frag, 2, 'circle') end
 
-    return Node.new('circle', { r = r, fn = fn or SCAD._fn })
+    return Node.new('circle', { r = r, frag = frag })
 end
 
 ---@param p { points: SCAD.Vec2[], paths?: number[][], convexity?: number }
@@ -392,39 +399,37 @@ function SCAD.cube(w, l, h, c)
     )
 end
 
-SCAD._fn = 64
-
 ---@param r number radius
----@param fn? number
+---@param frag? SCAD.FragOptions
 ---@return SCAD.Node
-function SCAD.sphere(r, fn)
+function SCAD.sphere(r, frag)
     c_size(r, 1, 'sphere')
-    if fn ~= nil then c_fn(fn, 2, 'sphere') end
+    if frag ~= nil then c_frag(frag, 2, 'sphere') end
 
-    return Node.new('sphere', { r = r, fn = fn or SCAD._fn })
+    return Node.new('sphere', { r = r, frag = frag })
 end
 
----@overload fun(h: number, r: number, center?: true, fn?: number): SCAD.Node
+---@overload fun(h: number, r: number, center?: true, frag?: SCAD.FragOptions): SCAD.Node
 ---@param h number height
 ---@param r1 number bottom radius
----@param r2? number top radius, or true (center)
----@param c? true center, or fn number
----@param fn? number
+---@param r2? number top radius
+---@param c? true center
+---@param frag? SCAD.FragOptions
 ---@return SCAD.Node
-function SCAD.cylinder(h, r1, r2, c, fn)
+function SCAD.cylinder(h, r1, r2, c, frag)
     c_size(h, 1, 'cylinder')
     if type(r2) == 'number' then
         c_size(r1, 2, 'cylinder')
         c_size(r2, 3, 'cylinder')
         if c ~= nil then c_bool(c, 4, 'cylinder') end
-        if fn ~= nil then c_fn(fn, 5, 'cylinder') end
+        if frag ~= nil then c_frag(frag, 5, 'cylinder') end
     else
-        -- one radius mode (no r2): center = r2==true, fn = c
+        -- one radius mode (no r2): center = r2==true, frag = c
         if r2 ~= nil and r2 ~= true then
-            error("cylinder: expected cylinder(h, r[, true][, fn]) or cylinder(h, r1, r2[, true][, fn])", 3)
+            error("cylinder: expected cylinder(h, r[, true][, frag]) or cylinder(h, r1, r2[, true][, frag])", 3)
         end
         c_size(r1, 2, 'cylinder')
-        if c ~= nil then c_fn(c, 4, 'cylinder') end
+        if c ~= nil then c_frag(c, 4, 'cylinder') end
     end
 
     return Node.new('cylinder',
@@ -433,12 +438,12 @@ function SCAD.cylinder(h, r1, r2, c, fn)
             r1     = r1,
             r2     = r2,
             center = c == true,
-            fn     = fn or SCAD._fn,
+            frag   = frag,
         } or {
             h      = h,
             r      = r1,
             center = r2 == true,
-            fn     = c or SCAD._fn,
+            frag   = c and c ~= true and c or nil,
         }
     )
 end
@@ -542,21 +547,27 @@ local primitive_templates = {
             p.r1 and "r1=" .. fmt(p.r1) or false,
             p.r2 and "r2=" .. fmt(p.r2) or false,
             p.center and "center=true" or false,
-            p.fn and "$fn=" .. p.fn or false,
+            p.frag and p.frag.fa and "$fa=" .. fmt(p.frag.fa) or false,
+            p.frag and p.frag.fs and "$fs=" .. fmt(p.frag.fs) or false,
+            p.frag and p.frag.fn and "$fn=" .. p.frag.fn or false,
         }
     end,
     sphere = function(p)
         return buildP {
             "sphere",
             "r=" .. fmt(p.r),
-            p.fn and "$fn=" .. p.fn or false,
+            p.frag and p.frag.fa and "$fa=" .. fmt(p.frag.fa) or false,
+            p.frag and p.frag.fs and "$fs=" .. fmt(p.frag.fs) or false,
+            p.frag and p.frag.fn and "$fn=" .. p.frag.fn or false,
         }
     end,
     circle = function(p)
         return buildP {
             "circle",
             "r=" .. fmt(p.r),
-            p.fn and "$fn=" .. p.fn or false,
+            p.frag and p.frag.fa and "$fa=" .. fmt(p.frag.fa) or false,
+            p.frag and p.frag.fs and "$fs=" .. fmt(p.frag.fs) or false,
+            p.frag and p.frag.fn and "$fn=" .. p.frag.fn or false,
         }
     end,
     text = function(p)
@@ -762,6 +773,7 @@ function SCAD.install()
             _G[k] = v
         end
     end
+    return SCAD
 end
 
 return SCAD
