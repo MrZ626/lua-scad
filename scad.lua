@@ -263,15 +263,25 @@ function Node:rotate_extrude(angle, convexity)
     return self
 end
 
----@param params { r?: number, delta?: number, chamfer?: true }
+---r-branch of offset
+---@param r number offset radius
 ---@return SCAD.Node
-function Node:offset(params)
-    params = params or {}
-    if params.r ~= nil then c_num(params.r, 'r', 'offset') end
-    if params.delta ~= nil then c_num(params.delta, 'delta', 'offset') end
-    if params.chamfer ~= nil then c_bool(params.chamfer, 'chamfer', 'offset') end
+function Node:offsetR(r)
+    c_num(r, 1, 'offsetR')
 
-    ins(self.transforms, { op = 'offset', r = params.r, delta = params.delta, chamfer = params.chamfer })
+    ins(self.transforms, { op = 'offset', r = r })
+    return self
+end
+
+---delta-branch of offset
+---@param delta number offset distance
+---@param chamfer? true enable chamfer
+---@return SCAD.Node
+function Node:offsetD(delta, chamfer)
+    c_num(delta, 1, 'offsetD')
+    if chamfer ~= nil then c_bool(chamfer, 2, 'offsetD') end
+
+    ins(self.transforms, { op = 'offset', delta = delta, chamfer = chamfer })
     return self
 end
 
@@ -312,17 +322,22 @@ function Node:array(count, dx, dy, dz)
     return self
 end
 
----[Extra] [2D] Lossless rounding (or chamfer) via nested offset
----@param d number corner radius (or chamfer size)
----@param chamfer? true use chamfer instead of round
+---[Extra] [2D] Lossless rounding via double offset
+---@param r number corner radius
 ---@return SCAD.Node
-function Node:round(d, chamfer)
-    c_num(d, 1, 'round')
-    if chamfer ~= nil then c_bool(chamfer, 2, 'round') end
+function Node:round(r)
+    c_num(r, 1, 'round')
 
-    return self
-        :offset({ delta = -d })
-        :offset(chamfer and { delta = d, chamfer = true } or { r = d })
+    return self:offsetD(-r):offsetR(r)
+end
+
+---[Extra] [2D] Lossless chamfer via double offset
+---@param d number chamfer size
+---@return SCAD.Node
+function Node:chamfer(d)
+    c_num(d, 1, 'chamfer')
+
+    return self:offsetD(-d):offsetD(d, true)
 end
 
 --------------------------------------------------------------
