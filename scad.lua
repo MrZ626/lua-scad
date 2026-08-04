@@ -454,33 +454,48 @@ function Node:color(r, g, b, a)
     return self
 end
 
----@param params { h: number, center?: true, twist?: number, convexity?: number }
+---@param params { h: number, center?: true, twist?: number, slices?: number, scale?: number | SCAD.Vec2, convexity?: number, frag?: SCAD.FragOptions }
 ---@return SCAD.Node
 function Node:linear_extrude(params)
     params = params or {}
     c_size(params.h, 'h', 'linear_extrude')
     if params.center ~= nil then c_bool(params.center, 'center', 'linear_extrude') end
     if params.twist ~= nil then c_num(params.twist, 'twist', 'linear_extrude') end
+    if params.slices ~= nil then c_fn(params.slices, 'slices', 'linear_extrude') end
+    if params.scale ~= nil then
+        if type(params.scale) == 'table' then
+            assert(type(params.scale[1]) == 'number' and type(params.scale[2]) == 'number',
+                "linear_extrude: field 'scale' must be a number or {x, y}")
+        else
+            c_num(params.scale, 'scale', 'linear_extrude')
+        end
+    end
     if params.convexity ~= nil then c_num(params.convexity, 'convexity', 'linear_extrude') end
+    if params.frag ~= nil then c_frag(params.frag, 'frag', 'linear_extrude') end
 
     ins(self.transforms, {
         op = 'linear_extrude',
         h = params.h,
         center = params.center,
         twist = params.twist,
-        convexity = params.convexity
+        slices = params.slices,
+        scale = params.scale,
+        convexity = params.convexity,
+        frag = params.frag,
     })
     return self
 end
 
 ---@param angle? number
 ---@param convexity? number
+---@param frag? SCAD.FragOptions
 ---@return SCAD.Node
-function Node:rotate_extrude(angle, convexity)
+function Node:rotate_extrude(angle, convexity, frag)
     if angle ~= nil then c_num(angle, 1, 'rotate_extrude') end
     if convexity ~= nil then c_num(convexity, 2, 'rotate_extrude') end
+    if frag ~= nil then c_frag(frag, 3, 'rotate_extrude') end
 
-    ins(self.transforms, { op = 'rotate_extrude', angle = angle, convexity = convexity })
+    ins(self.transforms, { op = 'rotate_extrude', angle = angle, convexity = convexity, frag = frag })
     return self
 end
 
@@ -755,7 +770,12 @@ local transform_templates = {
             fmt(tr.h),
             tr.center and "center=true" or false,
             tr.twist and "twist=" .. fmt(tr.twist) or false,
+            tr.slices and "slices=" .. tr.slices or false,
+            tr.scale and ("scale=" .. (type(tr.scale) == 'table' and fmt_vec(tr.scale) or fmt(tr.scale))) or false,
             tr.convexity and "convexity=" .. tr.convexity or false,
+            tr.frag and tr.frag.fa and "$fa=" .. fmt(tr.frag.fa) or false,
+            tr.frag and tr.frag.fs and "$fs=" .. fmt(tr.frag.fs) or false,
+            tr.frag and tr.frag.fn and "$fn=" .. tr.frag.fn or false,
         }
     end,
     rotate_extrude = function(tr)
@@ -763,6 +783,9 @@ local transform_templates = {
             "rotate_extrude",
             tr.angle and "angle=" .. fmt(tr.angle) or false,
             tr.convexity and "convexity=" .. tr.convexity or false,
+            tr.frag and tr.frag.fa and "$fa=" .. fmt(tr.frag.fa) or false,
+            tr.frag and tr.frag.fs and "$fs=" .. fmt(tr.frag.fs) or false,
+            tr.frag and tr.frag.fn and "$fn=" .. tr.frag.fn or false,
         }
     end,
     offset = function(tr)
