@@ -7,7 +7,7 @@ local ins, rem, concat = table.insert, table.remove, table.concat
 ---@alias SCAD.FragOptions { fa?: number, fs?: number, fn?: number }
 
 ---@alias SCAD.enum.Shape 'cube' | 'square' | 'cylinder' | 'sphere' | 'circle' | 'text' | 'polygon' | 'polyhedron' | 'import' | 'surface'
----@alias SCAD.enum.Calculate 'union' | 'difference' | 'intersection' | 'hull' | 'minkowski'
+---@alias SCAD.enum.Calculate 'union' | 'difference' | 'intersection' | 'hull' | 'minkowski' | 'fill' | 'render'
 ---@alias SCAD.enum.Transform 'translate' | 'scale' | 'rotate' | 'mirror' | 'resize' | 'multmatrix' | 'color' | 'linear_extrude' | 'rotate_extrude' | 'offset' | 'projection'
 ---@alias SCAD.enum.Op SCAD.enum.Shape | SCAD.enum.Calculate | SCAD.enum.Transform
 
@@ -300,24 +300,26 @@ function SCAD.import(path, convexity)
 end
 
 --------------------------------------------------------------
----Boolean / hull / minkowski (wrap child node arrays)
+---Multinode Operations (union / hull / ...)
 
 ---@alias SCAD.multiNodeOp fun(children: SCAD.Node[]): SCAD.Node
 
-SCAD.union        = nil ---@type SCAD.multiNodeOp
-SCAD.difference   = nil ---@type SCAD.multiNodeOp
-SCAD.intersection = nil ---@type SCAD.multiNodeOp
-SCAD.hull         = nil ---@type SCAD.multiNodeOp
-SCAD.minkowski    = nil ---@type SCAD.multiNodeOp
+local function makeMultinodeOp(name)
+    return function(children)
+        assert(type(children) == 'table' and #children > 0, name .. " needs at least one child")
+        for i, child in next, children do c_node(child, i, name) end
 
-for _, kind in next, { 'union', 'difference', 'intersection', 'hull', 'minkowski' } do
-    SCAD[kind] = function(children)
-        assert(type(children) == 'table' and #children > 0, kind .. " needs at least one child")
-        for i, child in next, children do c_node(child, i, kind) end
-
-        return Node.new(kind, nil, children)
+        return Node.new(name, nil, children)
     end
 end
+
+SCAD.union        = makeMultinodeOp('union') ---@type SCAD.multiNodeOp
+SCAD.difference   = makeMultinodeOp('difference') ---@type SCAD.multiNodeOp
+SCAD.intersection = makeMultinodeOp('intersection') ---@type SCAD.multiNodeOp
+SCAD.hull         = makeMultinodeOp('hull') ---@type SCAD.multiNodeOp
+SCAD.minkowski    = makeMultinodeOp('minkowski') ---@type SCAD.multiNodeOp
+SCAD.fill         = makeMultinodeOp('fill') ---@type SCAD.multiNodeOp
+SCAD.render       = makeMultinodeOp('render') ---@type SCAD.multiNodeOp
 
 --------------------------------------------------------------
 ---Node
