@@ -25,7 +25,7 @@ local Node = {}; Node.__index = Node
 local SCAD = {}
 
 local function what(n)
-    return type(n) == 'string' and ("field '" .. n .. "'") or ("arg " .. n)
+    return type(n) == 'string' and ("field '" .. n .. "'") or ("arg_" .. n)
 end
 local function c_bool(v, n, f)
     assert(type(v) == 'boolean',
@@ -59,6 +59,14 @@ end
 local function c_node(v, n, f)
     assert(type(v) == 'table' and v.__index == Node,
         format("%s: %s must be a scad node, got %s", f, what(n), type(v)))
+end
+local function c_vec2(m, n, f)
+    assert(type(m) == 'table' and #m == 2, format("%s: %s must be a vector with 2 elements", f, what(n)))
+    for i = 1, 2 do c_num(m[i], format('[%d]', i), f) end
+end
+local function c_vec3(m, n, f)
+    assert(type(m) == 'table' and #m == 3, format("%s: %s must be a vector with 3 elements", f, what(n)))
+    for i = 1, 3 do c_num(m[i], format('[%d]', i), f) end
 end
 local function c_mat4(m, n, f)
     assert(type(m) == 'table' and #m == 4, format("%s: %s must be a 4x4 matrix", f, what(n)))
@@ -120,22 +128,31 @@ function SCAD.circle(r, frag)
     return Node.new('circle', { r = r, frag = frag })
 end
 
----@param p { points: SCAD.Vec2[], paths?: number[][], convexity?: number }
+---@param points SCAD.Vec2[]
+---@param paths? number[][]
+---@param convexity? number
 ---@return SCAD.Node
-function SCAD.polygon(p)
-    assert(type(p) == 'table', "polygon: expected a table parameter")
-    local pts = p.points
-    assert(type(pts) == 'table' and #pts >= 3, "polygon: field 'points' must be an array of at least 3 points")
-    for i, pt in next, pts do
-        assert(type(pt) == 'table' and type(pt[1]) == 'number' and type(pt[2]) == 'number',
-            format("polygon: points[%d] must be {x, y}", i))
+function SCAD.polygon(points, paths, convexity)
+    assert(type(points) == 'table' and #points >= 3, "polygon: 'arg_1' must be an array of at least 3 points")
+    for i, pt in next, points do c_vec2(pt, format('arg_1[%d]', i), 'polygon') end
+    if paths ~= nil then
+        assert(type(paths) == 'table', "polygon: 'arg_2' must be a table")
+        for i, path in next, paths do
+            assert(type(path) == 'table', format("polygon: arg_2[%d] must be an array", i))
+            for j = 1, #path do
+                assert(type(path[j]) == 'number' and path[j] % 1 == 0 and path[j] >= 0,
+                    format("polygon: arg_2[%d][%d] must be a non-negative integer index", i, j))
+                assert(path[j] < #points,
+                    format("polygon: arg_2[%d][%d] index %d out of range (max %d)", i, j, path[j], #points - 1))
+            end
+        end
     end
-    if p.convexity ~= nil then c_num(p.convexity, 'convexity', 'polygon') end
+    if convexity ~= nil then c_num(convexity, 3, 'polygon') end
 
     return Node.new('polygon', {
-        points    = pts,
-        paths     = p.paths,
-        convexity = p.convexity,
+        points    = points,
+        paths     = paths,
+        convexity = convexity,
     })
 end
 
@@ -250,27 +267,30 @@ function SCAD.cylinder(h, r1, r2, c, frag)
     )
 end
 
----@param p { points: SCAD.Vec3[], faces: SCAD.Vec3[], convexity?: number }
+---@param points SCAD.Vec3[]
+---@param faces number[][]
+---@param convexity? number
 ---@return SCAD.Node
-function SCAD.polyhedron(p)
-    assert(type(p) == 'table', "polyhedron: expected a table parameter")
-    local pts = p.points
-    assert(type(pts) == 'table' and #pts >= 4, "polyhedron: field 'points' must be an array of at least 4 points")
-    for i, pt in next, pts do
-        assert(type(pt) == 'table' and type(pt[1]) == 'number' and type(pt[2]) == 'number' and type(pt[3]) == 'number',
-            format("polyhedron: points[%d] must be {x, y, z}", i))
-    end
-    assert(type(p.faces) == 'table' and #p.faces > 0, "polyhedron: field 'faces' must be a non-empty array")
-    for i, face in next, p.faces do
+function SCAD.polyhedron(points, faces, convexity)
+    assert(type(points) == 'table' and #points >= 4, "polyhedron: 'arg_1' must be an array of at least 4 points")
+    for i, pt in next, points do c_vec3(pt, format('arg_1[%d]', i), 'polyhedron') end
+    assert(type(faces) == 'table' and #faces > 0, "polyhedron: 'arg_2' must be a non-empty array")
+    for i, face in next, faces do
         assert(type(face) == 'table' and #face >= 3,
-            format("polyhedron: faces[%d] must be an array of at least 3 vertex indices", i))
+            format("polyhedron: arg_2[%d] must be an array of at least 3 vertex indices", i))
+        for j = 1, #face do
+            assert(type(face[j]) == 'number' and face[j] % 1 == 0 and face[j] >= 0,
+                format("polyhedron: arg_2[%d][%d] must be a non-negative integer index", i, j))
+            assert(face[j] < #points,
+                format("polyhedron: arg_2[%d][%d] index %d out of range (max %d)", i, j, face[j], #points - 1))
+        end
     end
-    if p.convexity ~= nil then c_num(p.convexity, 'convexity', 'polyhedron') end
+    if convexity ~= nil then c_num(convexity, 3, 'polyhedron') end
 
     return Node.new('polyhedron', {
-        points    = pts,
-        faces     = p.faces,
-        convexity = p.convexity,
+        points    = points,
+        faces     = faces,
+        convexity = convexity,
     })
 end
 
@@ -464,8 +484,7 @@ function Node:linear_extrude(params)
     if params.slices ~= nil then c_fn(params.slices, 'slices', 'linear_extrude') end
     if params.scale ~= nil then
         if type(params.scale) == 'table' then
-            assert(type(params.scale[1]) == 'number' and type(params.scale[2]) == 'number',
-                "linear_extrude: field 'scale' must be a number or {x, y}")
+            c_vec2(params.scale, 'scale', 'linear_extrude')
         else
             c_num(params.scale, 'scale', 'linear_extrude')
         end

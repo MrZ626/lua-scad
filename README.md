@@ -39,13 +39,13 @@ lua model.lua
 - 2D
     - `square(size, center?)` / `square(w, l, center?)`
     - `circle(r, fn?)`
-    - `polygon{points={{x1,y1},{x2,y2},...}, paths?={{},...}, convexity?=10}`
+    - `polygon(points, paths?, convexity?)`
     - `text(str, size?, font?, halign?, valign?, spacing?, direction?, language?, script?)`
 - 3D
     - `cube(size, center?)` / `cube(w, l, h, center?)`
     - `cylinder(h, r, center?, fn?)` / `cylinder(h, r1, r2, center?, fn?)`
     - `sphere(r, fn?)`
-    - `polyhedron{points={{x1,y1,z1},{x2,y2,z2},...}, faces={{i1,i2,i3,...},...}, convexity?=10}`
+    - `polyhedron(points, faces, convexity?)`
     - `surface(file, center?, convexity?)`
 
 ### 变换和运算样例
