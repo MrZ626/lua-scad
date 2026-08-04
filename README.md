@@ -18,8 +18,8 @@ local base = cube(10, 10, 5, true) -- 10x10x5长方体
 local hole = cylinder(6, 4, true) -- R4通孔
 local part = difference({ base, hole }) -- 挖！
 
-render(part, "./out.scad") -- 生成脚本
-render(part, "./out.stl")  -- 渲染 STL（需要控制台有openscad命令）
+export(part, "./out.scad") -- 生成脚本
+export(part, "./out.stl")  -- 渲染 STL（需要控制台有openscad命令）
 ```
 
 运行：
@@ -65,15 +65,15 @@ local diff_ab=difference{ a, b } -- 其他操作如 union 等同理
 
 ### 输出
 
-`render(...)` 接受多个片段（scad 节点渲染、字符串原样），片段间以两个换行分隔；最后一个参数为导出目标。
+`export(...)` 接受多个片段（scad 节点渲染、字符串原样），片段间以两个换行分隔；最后一个参数为导出目标。
 
 | 调用                        | 行为                               |
 | --------------------------- | ---------------------------------- |
-| `render(obj)`               | 编译物体为scad脚本，返回脚本字符串 |
-| `render("$fn=32;", obj)`    | 头部注入字符串，返回脚本字符串     |
-| `render(..., "./out.scad")` | 把脚本字符串写入`.scad`文件        |
-| `render(..., "./out.stl")`  | 调用 openscad 渲染并写入`.stl`文件 |
-| `render(..., true)`         | 打开 openscad 预览（不存文件）     |
+| `export(obj)`               | 编译物体为scad脚本，返回脚本字符串 |
+| `export("$fn=32;", obj)`    | 头部注入字符串，返回脚本字符串     |
+| `export(..., "./out.scad")` | 把脚本字符串写入`.scad`文件        |
+| `export(..., "./out.stl")`  | 调用 openscad 渲染并写入`.stl`文件 |
+| `export(..., true)`         | 打开 openscad 预览（不存文件）     |
 
 字符串片段可用于精确控制 scad 输出顺序（如头部设置 `$fn`/模块定义等 Lua 层无法表达的顺序）。
 

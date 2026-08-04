@@ -787,7 +787,7 @@ end
 ---@overload fun(...: (SCAD.Node | string)): string
 ---@overload fun(...: (SCAD.Node | string), path: string)
 ---@overload fun(...: (SCAD.Node | string), preview: true)
-function SCAD.render(...)
+function SCAD.export(...)
     local n = select('#', ...)
 
     local mode
@@ -813,7 +813,7 @@ function SCAD.render(...)
         if type(buffer[i]) == 'table' and buffer[i].__index == Node then
             buffer[i] = render_node(buffer[i])
         elseif type(buffer[i]) ~= 'string' then
-            error("render: expected SCAD.Node object or scad script string, got " .. type(buffer[i]))
+            error("export: expected SCAD.Node object or scad script string, got " .. type(buffer[i]))
         end
     end
 
@@ -830,7 +830,7 @@ function SCAD.render(...)
         -- Write to .scad file
         io.open(lastParam, 'w'):write(code):close()
     elseif mode == 'stl' then
-        -- Render to .stl file with openscad
+        -- Render & write to .stl file with openscad
         local tmp = os.tmpname() .. '.stl'
         local p = io.popen(format('"openscad" - -o "%s" 2>/dev/null', tmp), 'w')
         p:write(code)
