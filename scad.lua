@@ -723,9 +723,8 @@ function SCAD.render(obj, path)
 
     -- Open SCAD preview
     if path == true then
-        local p = io.popen("openscad -", "w")
-        p:write(code)
-        p:close()
+        io.open('_preview.scad', 'w'):write(code):close()
+        os.execute('"openscad" "_preview.scad"')
         return
     end
 
