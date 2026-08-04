@@ -1,4 +1,4 @@
-local type = type
+local next, type = next, type
 local format = string.format
 local ins, rem, concat = table.insert, table.remove, table.concat
 
@@ -324,7 +324,7 @@ function SCAD.polygon(p)
     assert(type(p) == 'table', "polygon: expected a table parameter")
     local pts = p.points
     assert(type(pts) == 'table' and #pts >= 3, "polygon: field 'points' must be an array of at least 3 points")
-    for i, pt in ipairs(pts) do
+    for i, pt in next, pts do
         assert(type(pt) == 'table' and type(pt[1]) == 'number' and type(pt[2]) == 'number',
             format("polygon: points[%d] must be {x, y}", i))
     end
@@ -454,12 +454,12 @@ function SCAD.polyhedron(p)
     assert(type(p) == 'table', "polyhedron: expected a table parameter")
     local pts = p.points
     assert(type(pts) == 'table' and #pts >= 4, "polyhedron: field 'points' must be an array of at least 4 points")
-    for i, pt in ipairs(pts) do
+    for i, pt in next, pts do
         assert(type(pt) == 'table' and type(pt[1]) == 'number' and type(pt[2]) == 'number' and type(pt[3]) == 'number',
             format("polyhedron: points[%d] must be {x, y, z}", i))
     end
     assert(type(p.faces) == 'table' and #p.faces > 0, "polyhedron: field 'faces' must be a non-empty array")
-    for i, face in ipairs(p.faces) do
+    for i, face in next, p.faces do
         assert(type(face) == 'table' and #face >= 3,
             format("polyhedron: faces[%d] must be an array of at least 3 vertex indices", i))
     end
@@ -511,7 +511,7 @@ SCAD.minkowski    = nil ---@type SCAD.multiNodeOp
 for _, kind in next, { 'union', 'difference', 'intersection', 'hull', 'minkowski' } do
     SCAD[kind] = function(children)
         assert(type(children) == 'table' and #children > 0, kind .. " needs at least one child")
-        for i, child in ipairs(children) do c_node(child, i, kind) end
+        for i, child in next, children do c_node(child, i, kind) end
 
         return Node.new(kind, nil, children)
     end
@@ -702,7 +702,7 @@ local render_node
 
 local function render_boolean(n)
     local parts = {}
-    for i, child in ipairs(n.children) do
+    for i, child in next, n.children do
         parts[i] = render_node(child)
     end
     return n.op .. "() {\n" .. concat(parts, "\n") .. "\n}"
@@ -721,30 +721,53 @@ function render_node(n)
     return wrap_transforms(n, (primitive_templates[n.op] or error("unknown primitive type: " .. n.op))(n.params))
 end
 
----@return string?
----@overload fun(obj: SCAD.Node): string return the generated OpenSCAD code as a string
----@overload fun(obj: SCAD.Node, path: string) save .scad / .stl to file (other suffixes print a warning and write as .scad)
----@overload fun(obj: SCAD.Node, preview: true) preview in openscad (no file written)
-function SCAD.render(obj, path)
-    assert(type(obj) == 'table' and obj.op, "render expects a scad node object")
+---@overload fun(...: (SCAD.Node | string)): string
+---@overload fun(...: (SCAD.Node | string), path: string)
+---@overload fun(...: (SCAD.Node | string), preview: true)
+function SCAD.render(...)
+    local n = select('#', ...)
 
-    local code = render_node(obj) .. "\n"
-
-    -- Return scad code
-    if not path then return code end
-
-    -- Open SCAD preview
-    if path == true then
-        io.open('_preview.scad', 'w'):write(code):close()
-        os.execute('"openscad" "_preview.scad"')
-        return
+    local mode
+    local lastParam = select(n, ...)
+    if lastParam == true then
+        mode = 'preview'
+    elseif type(lastParam) == 'string' and lastParam:match('%.scad$') then
+        mode = 'scad'
+    elseif type(lastParam) == 'string' and lastParam:match('%.stl$') then
+        mode = 'stl'
+    else
+        mode = 'raw'
     end
 
-    assert(type(path) == 'string', "render path must be string or true, got " .. type(path))
+    local buffer = { ... }
 
-    if path:match("%.scad$") then
-        io.open(path, 'w'):write(code):close()
-    elseif path:match('%.stl$') then
+    if mode ~= 'raw' then
+        buffer[n] = nil
+        n = n - 1
+    end
+
+    for i = 1, n do
+        if type(buffer[i]) == 'table' and buffer[i].__scad_node then
+            buffer[i] = render_node(buffer[i])
+        elseif type(buffer[i]) ~= 'string' then
+            error("render: expected SCAD.Node or string, got " .. type(buffer[i]))
+        end
+    end
+
+    local code = concat(buffer, "\n\n")
+
+    if mode == 'raw' then
+        -- Raw string
+        return code
+    elseif mode == 'preview' then
+        -- Preview in openscad
+        io.open('_preview.scad', 'w'):write(code):close()
+        os.execute('"openscad" "_preview.scad"')
+    elseif mode == 'scad' then
+        -- Write to .scad file
+        io.open(lastParam, 'w'):write(code):close()
+    elseif mode == 'stl' then
+        -- Render to .stl file with openscad
         local tmp = os.tmpname() .. '.stl'
         local p = io.popen(format('"openscad" - -o "%s" 2>/dev/null', tmp), 'w')
         p:write(code)
@@ -753,13 +776,12 @@ function SCAD.render(obj, path)
             local src = assert(io.open(tmp, 'rb'))
             local data = src:read('a')
             src:close()
-            io.open(path, 'wb'):write(data):close()
+            io.open(lastParam, 'wb'):write(data):close()
         end
         os.remove(tmp)
         assert(ok, "openscad render failed")
     else
-        io.stderr:write("Warning: filename doesn't end with .scad or .stl (" .. path .. "), writing .scad code...\n")
-        io.open(path, 'w'):write(code):close()
+        error("?")
     end
 end
 
