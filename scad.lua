@@ -284,6 +284,16 @@ function Node:projection(cut)
     return self
 end
 
+---[Extra] Shortcut of Projection (cut mode), with optional height specification
+---@param h? number height
+---@return SCAD.Node
+function Node:cut(h)
+    if h ~= nil then c_num(h, 1, 'cut') end
+
+    if h ~= nil then self:translate(0, 0, -(h or 0)) end
+    return self:projection(true)
+end
+
 --------------------------------------------------------------
 ---2D Primitive
 
@@ -709,8 +719,7 @@ local function render_boolean(n)
 end
 
 local function wrap_transforms(n, code)
-    for i = #n.transforms, 1, -1 do
-        local tr = n.transforms[i]
+    for _, tr in next, n.transforms do
         code = transform_templates[tr.op](tr) .. " {\n" .. code .. "\n}"
     end
     return code
