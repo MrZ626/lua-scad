@@ -8,7 +8,7 @@ local ins, rem, concat = table.insert, table.remove, table.concat
 
 ---@alias SCAD.enum.Shape 'cube' | 'square' | 'cylinder' | 'sphere' | 'circle' | 'text' | 'polygon' | 'polyhedron' | 'import' | 'surface'
 ---@alias SCAD.enum.Calculate 'union' | 'difference' | 'intersection' | 'hull' | 'minkowski' | 'fill' | 'render'
----@alias SCAD.enum.Transform 'translate' | 'scale' | 'rotate' | 'mirror' | 'resize' | 'multmatrix' | 'color' | 'linear_extrude' | 'rotate_extrude' | 'offset' | 'projection'
+---@alias SCAD.enum.Transform 'translate' | 'scale' | 'rotate' | 'mirror' | 'resize' | 'multmatrix' | 'color' | 'linear_extrude' | 'rotate_extrude' | 'offset' | 'projection' | 'array' | 'rotate_array'
 ---@alias SCAD.enum.Op SCAD.enum.Shape | SCAD.enum.Calculate | SCAD.enum.Transform
 
 ---@class SCAD.Transform
@@ -560,6 +560,26 @@ function Node:array(count, dx, dy, dz)
     return self
 end
 
+---[Extra] Rotate a node around an axis to create a circular array
+---@param count number copy count (including the original)
+---@param angle number rotation step per copy (degrees)
+---@param ax? number axis vector x
+---@param ay? number axis vector y
+---@param az? number axis vector z
+---@return SCAD.Node
+function Node:rotate_array(count, angle, ax, ay, az)
+    c_size(count, 1, 'rotate_array')
+    c_num(angle, 2, 'rotate_array')
+    if ax ~= nil then
+        c_num(ax, 3, 'rotate_array')
+        c_num(ay, 4, 'rotate_array')
+        c_num(az, 5, 'rotate_array')
+    end
+
+    ins(self.transforms, { op = 'rotate_array', count = count, angle = angle, axis = ax and { ax, ay, az } })
+    return self
+end
+
 ---[Extra] [2D] Lossless rounding via double offset
 ---@param r number corner radius
 ---@return SCAD.Node
@@ -760,7 +780,19 @@ local transform_templates = {
         }
     end,
     array = function(tr)
-        return "for (i = [0:" .. (tr.count - 1) .. "]) translate(" .. fmt_vec(tr.step) .. " * i)"
+        return "for (i = [0:" .. (tr.count - 1) .. "]) " ..
+            buildT {
+                "translate",
+                fmt_vec(tr.step) .. " * i"
+            }
+    end,
+    rotate_array = function(tr)
+        return "for (i = [0:" .. (tr.count - 1) .. "]) " ..
+            buildT {
+                "rotate",
+                fmt(tr.angle) .. " * i",
+                tr.axis and fmt_vec(tr.axis) or false,
+            }
     end,
 }
 
