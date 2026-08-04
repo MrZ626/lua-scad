@@ -63,6 +63,17 @@ local twisted_cuboid=square(10):linear_extrude{ h=20, twist=30, center=true }
 local diff_ab=difference{ a, b } -- 其他操作如 union 等同理
 ```
 
+### 调试修饰符
+
+对应 OpenSCAD 的 `#`/`%`/`!`/`*`
+
+```lua
+local marked = cube(5):translate(1, 2, 3):debug()      -- # 高亮最终结果
+local ghost  = cylinder(10, 4):background()            -- % 灰色背景显示
+local solo   = sphere(5):root()                        -- ! 仅显示此子树
+local hidden = cube(5):disable()                       -- * 隐藏此子树
+```
+
 ### 输出
 
 `export(...)` 接受多个片段（scad 节点渲染、字符串原样），片段间以两个换行分隔；最后一个参数为导出目标。
