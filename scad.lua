@@ -312,6 +312,19 @@ function Node:array(count, dx, dy, dz)
     return self
 end
 
+---[Extra] [2D] Lossless rounding (or chamfer) via nested offset
+---@param d number corner radius (or chamfer size)
+---@param chamfer? true use chamfer instead of round
+---@return SCAD.Node
+function Node:round(d, chamfer)
+    c_num(d, 1, 'round')
+    if chamfer ~= nil then c_bool(chamfer, 2, 'round') end
+
+    return self
+        :offset({ delta = -d })
+        :offset(chamfer and { delta = d, chamfer = true } or { r = d })
+end
+
 --------------------------------------------------------------
 ---2D Primitive
 
