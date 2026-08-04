@@ -7,9 +7,13 @@ local ins, rem, concat = table.insert, table.remove, table.concat
 ---@alias SCAD.FragOptions { fa?: number, fs?: number, fn?: number }
 
 ---@alias SCAD.enum.Shape 'cube' | 'square' | 'cylinder' | 'sphere' | 'circle' | 'text' | 'polygon' | 'polyhedron' | 'import' | 'surface'
----@alias SCAD.enum.Calculate 'union' | 'difference' | 'intersection' | 'hull' | 'minkowski' | 'fill' | 'render'
----@alias SCAD.enum.Transform 'translate' | 'scale' | 'rotate' | 'mirror' | 'resize' | 'multmatrix' | 'color' | 'linear_extrude' | 'rotate_extrude' | 'offset' | 'projection' | 'array' | 'rotate_array' | 'debug' | 'background' | 'root' | 'disable'
----@alias SCAD.enum.Op SCAD.enum.Shape | SCAD.enum.Calculate | SCAD.enum.Transform
+---@alias SCAD.enum.MultiNodeOp 'union' | 'difference' | 'intersection' | 'hull' | 'minkowski' | 'fill' | 'render'
+---@alias SCAD.enum.Transform.Basic 'translate' | 'scale' | 'rotate' | 'mirror' | 'resize' | 'multmatrix'
+---@alias SCAD.enum.Transform.Special 'color' | 'linear_extrude' | 'rotate_extrude' | 'offset' | 'projection'
+---@alias SCAD.enum.Transform.Extra 'array' | 'rotate_array'
+---@alias SCAD.enum.Transform.Debug 'debug' | 'background' | 'root' | 'disable'
+---@alias SCAD.enum.Transform SCAD.enum.Transform.Basic | SCAD.enum.Transform.Special | SCAD.enum.Transform.Extra | SCAD.enum.Transform.Debug
+---@alias SCAD.enum.Op SCAD.enum.Shape | SCAD.enum.MultiNodeOp | SCAD.enum.Transform
 
 ---@class SCAD.Transform
 ---@field op SCAD.enum.Transform
@@ -367,6 +371,27 @@ local function copy_table(t)
     return out
 end
 
+---[Extra] Deep clone a node to create duplicate copies
+---@return SCAD.Node
+function Node:clone()
+    local n = Node.new(self.op, copy_table(self.params))
+    n.transforms = copy_table(self.transforms)
+    if self.children then
+        n.children = {}
+        for i = 1, #self.children do
+            n.children[i] = self.children[i]:clone()
+        end
+    end
+    return n
+end
+
+---@param tr SCAD.Transform
+---@return SCAD.Node
+function Node:addTransform(tr)
+    self:addTransform(tr)
+    return self
+end
+
 --------------------------------------------------------------
 ---Node operations
 
@@ -381,7 +406,7 @@ function Node:translate(x, y, z)
         if z ~= nil then c_num(z, 3, 'translate') end
     end
 
-    ins(self.transforms, { op = 'translate', v = { x or 0, y or 0, z or 0 } })
+    self:addTransform { op = 'translate', v = { x or 0, y or 0, z or 0 } }
     return self
 end
 
@@ -397,7 +422,7 @@ function Node:scale(x, y, z)
         c_num(z, 3, 'scale')
     end
 
-    ins(self.transforms, { op = 'scale', v = y and { x, y, z } or x })
+    self:addTransform { op = 'scale', v = y and { x, y, z } or x }
     return self
 end
 
@@ -415,7 +440,7 @@ function Node:rotate(a, x, y, z)
         if z ~= nil then c_num(z, 4, 'rotate') end
     end
 
-    ins(self.transforms, { op = 'rotate', v = { a, x, y, z } })
+    self:addTransform { op = 'rotate', v = { a, x, y, z } }
     return self
 end
 
@@ -430,7 +455,7 @@ function Node:mirror(x, y, z)
         if z ~= nil then c_num(z, 3, 'mirror') end
     end
 
-    ins(self.transforms, { op = 'mirror', v = { x or 0, y or 0, z or 0 } })
+    self:addTransform { op = 'mirror', v = { x or 0, y or 0, z or 0 } }
     return self
 end
 
@@ -448,7 +473,7 @@ function Node:resize(w, l, h, auto, convexity)
     if auto ~= nil then c_bool(auto, 4, 'resize') end
     if convexity ~= nil then c_num(convexity, 5, 'resize') end
 
-    ins(self.transforms, { op = 'resize', v = { w, l, h }, auto = auto, convexity = convexity })
+    self:addTransform { op = 'resize', v = { w, l, h }, auto = auto, convexity = convexity }
     return self
 end
 
@@ -457,7 +482,7 @@ end
 function Node:multmatrix(m)
     c_mat4(m, 1, 'multmatrix')
 
-    ins(self.transforms, { op = 'multmatrix', m = m })
+    self:addTransform { op = 'multmatrix', m = m }
     return self
 end
 
@@ -486,9 +511,9 @@ function Node:color(r, g, b, a)
     end
 
     if type(r) == 'number' then
-        ins(self.transforms, { op = 'color', v = { r, g or r, b or r, a } })
+        self:addTransform { op = 'color', v = { r, g or r, b or r, a } }
     else
-        ins(self.transforms, { op = 'color', hex = r, alpha = g })
+        self:addTransform { op = 'color', hex = r, alpha = g }
     end
     return self
 end
@@ -511,7 +536,7 @@ function Node:linear_extrude(params)
     if params.convexity ~= nil then c_num(params.convexity, 'convexity', 'linear_extrude') end
     if params.frag ~= nil then c_frag(params.frag, 'frag', 'linear_extrude') end
 
-    ins(self.transforms, {
+    self:addTransform {
         op = 'linear_extrude',
         h = params.h,
         center = params.center,
@@ -520,7 +545,7 @@ function Node:linear_extrude(params)
         scale = params.scale,
         convexity = params.convexity,
         frag = params.frag,
-    })
+    }
     return self
 end
 
@@ -533,7 +558,7 @@ function Node:rotate_extrude(angle, convexity, frag)
     if convexity ~= nil then c_num(convexity, 2, 'rotate_extrude') end
     if frag ~= nil then c_frag(frag, 3, 'rotate_extrude') end
 
-    ins(self.transforms, { op = 'rotate_extrude', angle = angle, convexity = convexity, frag = frag })
+    self:addTransform { op = 'rotate_extrude', angle = angle, convexity = convexity, frag = frag }
     return self
 end
 
@@ -543,7 +568,7 @@ end
 function Node:offsetR(r)
     c_num(r, 1, 'offsetR')
 
-    ins(self.transforms, { op = 'offset', r = r })
+    self:addTransform { op = 'offset', r = r }
     return self
 end
 
@@ -555,7 +580,7 @@ function Node:offsetD(delta, chamfer)
     c_num(delta, 1, 'offsetD')
     if chamfer ~= nil then c_bool(chamfer, 2, 'offsetD') end
 
-    ins(self.transforms, { op = 'offset', delta = delta, chamfer = chamfer })
+    self:addTransform { op = 'offset', delta = delta, chamfer = chamfer }
     return self
 end
 
@@ -564,54 +589,40 @@ end
 function Node:projection(cut)
     if cut ~= nil then c_bool(cut, 1, 'projection') end
 
-    ins(self.transforms, { op = 'projection', cut = cut })
+    self:addTransform { op = 'projection', cut = cut }
     return self
 end
 
 ---[Debug] Add OpenSCAD debug modifier `#` (highlight, excluded from CSG)
 ---@return SCAD.Node
 function Node:debug()
-    ins(self.transforms, { op = 'debug' })
+    self:addTransform { op = 'debug' }
     return self
 end
 
 ---[Debug] Add OpenSCAD background modifier `%` (grayed out, excluded from CSG)
 ---@return SCAD.Node
 function Node:background()
-    ins(self.transforms, { op = 'background' })
+    self:addTransform { op = 'background' }
     return self
 end
 
 ---[Debug] Add OpenSCAD root modifier `!` (show this subtree only)
 ---@return SCAD.Node
 function Node:root()
-    ins(self.transforms, { op = 'root' })
+    self:addTransform { op = 'root' }
     return self
 end
 
 ---[Debug] Add OpenSCAD disable modifier `*` (hide this subtree)
 ---@return SCAD.Node
 function Node:disable()
-    ins(self.transforms, { op = 'disable' })
+    self:addTransform { op = 'disable' }
     return self
 end
 
 --------------------------------------------------------------
 ---Node operations EXTRA
-
----[Extra] Deep clone a node to create duplicate copies
----@return SCAD.Node
-function Node:clone()
-    local n = Node.new(self.op, copy_table(self.params))
-    n.transforms = copy_table(self.transforms)
-    if self.children then
-        n.children = {}
-        for i = 1, #self.children do
-            n.children[i] = self.children[i]:clone()
-        end
-    end
-    return n
-end
 
 ---[Extra] Shortcut of Projection (cut mode), with optional height specification
 ---@param h? number height
@@ -637,7 +648,7 @@ function Node:array(count, dx, dy, dz)
         if dz ~= nil then c_num(dz, 4, 'array') end
     end
 
-    ins(self.transforms, { op = 'array', count = count, step = { dx or 0, dy or 0, dz or 0 } })
+    self:addTransform { op = 'array', count = count, step = { dx or 0, dy or 0, dz or 0 } }
     return self
 end
 
@@ -657,7 +668,7 @@ function Node:rotate_array(count, angle, ax, ay, az)
         c_num(az, 5, 'rotate_array')
     end
 
-    ins(self.transforms, { op = 'rotate_array', count = count, angle = angle, axis = ax and { ax, ay, az } })
+    self:addTransform { op = 'rotate_array', count = count, angle = angle, axis = ax and { ax, ay, az } }
     return self
 end
 
