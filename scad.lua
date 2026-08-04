@@ -294,6 +294,24 @@ function Node:cut(h)
     return self:projection(true)
 end
 
+---[Extra] Duplicate a node with specific spatial step
+---@param count number count (including the original)
+---@param dx number x step
+---@param dy? number y step
+---@param dz? number z step
+---@return SCAD.Node
+function Node:array(count, dx, dy, dz)
+    c_size(count, 1, 'array')
+    c_num(dx, 2, 'array')
+    if dy ~= nil then
+        c_num(dy, 3, 'array')
+        if dz ~= nil then c_num(dz, 4, 'array') end
+    end
+
+    ins(self.transforms, { op = 'array', count = count, step = { dx or 0, dy or 0, dz or 0 } })
+    return self
+end
+
 --------------------------------------------------------------
 ---2D Primitive
 
@@ -530,6 +548,7 @@ end
 --------------------------------------------------------------
 ---Rendering
 
+---Return `pr(p1, p2, ...);`
 local function buildP(list)
     for i = #list, 1, -1 do if list[i] == false then rem(list, i) end end
     return rem(list, 1) .. "(" .. concat(list, ", ") .. ");"
@@ -626,6 +645,7 @@ local primitive_templates = {
         }
     end,
 }
+---Return `tr(p1, p2, ...)`
 local function buildT(list)
     for i = #list, 1, -1 do if list[i] == false then rem(list, i) end end
     return rem(list, 1) .. "(" .. concat(list, ", ") .. ")"
@@ -705,6 +725,9 @@ local transform_templates = {
             "projection",
             tr.cut and "cut=true" or false,
         }
+    end,
+    array = function(tr)
+        return "for (i = [0:" .. (tr.count - 1) .. "]) translate(" .. fmt_vec(tr.step) .. " * i)"
     end,
 }
 
