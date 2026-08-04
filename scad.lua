@@ -697,16 +697,17 @@ local function render_boolean(n)
     return n.op .. "() {\n" .. concat(parts, "\n") .. "\n}"
 end
 
-function render_node(n)
-    if n.children then return render_boolean(n) end
-    local t = primitive_templates[n.op]
-    assert(t, "unknown primitive type: " .. n.op)
-    local code = t(n.params)
+local function wrap_transforms(n, code)
     for i = #n.transforms, 1, -1 do
         local tr = n.transforms[i]
         code = transform_templates[tr.op](tr) .. " {\n" .. code .. "\n}"
     end
     return code
+end
+
+function render_node(n)
+    if n.children then return wrap_transforms(n, render_boolean(n)) end
+    return wrap_transforms(n, (primitive_templates[n.op] or error("unknown primitive type: " .. n.op))(n.params))
 end
 
 ---@return string?
