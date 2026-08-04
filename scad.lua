@@ -20,6 +20,7 @@ local ins, rem, concat = table.insert, table.remove, table.concat
 ---@field params table
 ---@field transforms SCAD.Transform[]
 ---@field children SCAD.Node[] | nil
+local Node = {}; Node.__index = Node
 
 local SCAD = {}
 
@@ -56,7 +57,7 @@ local function c_str(v, n, f)
     assert(type(v) == 'string', format("%s: %s must be a string, got %s", f, what(n), type(v)))
 end
 local function c_node(v, n, f)
-    assert(type(v) == 'table' and v.__scad_node,
+    assert(type(v) == 'table' and v.__index == Node,
         format("%s: %s must be a scad node, got %s", f, what(n), type(v)))
 end
 local function c_mat4(m, n, f)
@@ -86,11 +87,240 @@ local function fmt_mat(m)
 end
 
 --------------------------------------------------------------
----Node
+---Primitive 2D
 
----@class SCAD.Node
-local Node = { __scad_node = true }
-Node.__index = Node
+---@overload fun(size: number, center?: true): SCAD.Node
+---@param w number width
+---@param l number length or true (center)
+---@param c? true center
+---@return SCAD.Node
+function SCAD.square(w, l, c)
+    c_size(w, 1, 'square')
+    if type(l) == 'number' then
+        c_size(l, 2, 'square')
+        if c ~= nil then c_bool(c, 3, 'square') end
+    else
+        if l ~= nil then c_bool(l, 2, 'square') end
+    end
+
+    return Node.new('square',
+        type(l) == 'number' and
+        { size = { w, l }, center = c == true } or
+        { size = w, center = l == true }
+    )
+end
+
+---@param r number radius
+---@param frag? SCAD.FragOptions
+---@return SCAD.Node
+function SCAD.circle(r, frag)
+    c_size(r, 1, 'circle')
+    if frag ~= nil then c_frag(frag, 2, 'circle') end
+
+    return Node.new('circle', { r = r, frag = frag })
+end
+
+---@param p { points: SCAD.Vec2[], paths?: number[][], convexity?: number }
+---@return SCAD.Node
+function SCAD.polygon(p)
+    assert(type(p) == 'table', "polygon: expected a table parameter")
+    local pts = p.points
+    assert(type(pts) == 'table' and #pts >= 3, "polygon: field 'points' must be an array of at least 3 points")
+    for i, pt in next, pts do
+        assert(type(pt) == 'table' and type(pt[1]) == 'number' and type(pt[2]) == 'number',
+            format("polygon: points[%d] must be {x, y}", i))
+    end
+    if p.convexity ~= nil then c_num(p.convexity, 'convexity', 'polygon') end
+
+    return Node.new('polygon', {
+        points    = pts,
+        paths     = p.paths,
+        convexity = p.convexity,
+    })
+end
+
+---@overload fun(str: string): SCAD.Node
+---@overload fun(str: string, size: number): SCAD.Node
+---@param str string text to render
+---@param size? number font size
+---@param font? string font name
+---@param halign? 'left' | 'center' | 'right'
+---@param valign? 'top' | 'center' | 'baseline' | 'bottom'
+---@param spacing? number character spacing
+---@param direction? 'ltr' | 'rtl' | 'ttb' | 'btt'
+---@param language? string
+---@param script? string
+---@return SCAD.Node
+function SCAD.text(str, size, font, halign, valign, spacing, direction, language, script)
+    c_str(str, 1, 'text')
+    if size ~= nil then c_size(size, 2, 'text') end
+    if font ~= nil then c_str(font, 3, 'text') end
+    if halign ~= nil then c_str(halign, 4, 'text') end
+    if valign ~= nil then c_str(valign, 5, 'text') end
+    if spacing ~= nil then c_num(spacing, 6, 'text') end
+    if direction ~= nil then c_str(direction, 7, 'text') end
+    if language ~= nil then c_str(language, 8, 'text') end
+    if script ~= nil then c_str(script, 9, 'text') end
+
+    return Node.new('text', {
+        text      = str,
+        size      = size,
+        font      = font,
+        halign    = halign,
+        valign    = valign,
+        spacing   = spacing,
+        direction = direction,
+        language  = language,
+        script    = script,
+    })
+end
+
+--------------------------------------------------------------
+---Primitive 3D
+
+---@overload fun(size: number, center?: true): SCAD.Node
+---@param w number width
+---@param l? number length or true (center)
+---@param h? number height
+---@param c? true center
+---@return SCAD.Node
+function SCAD.cube(w, l, h, c)
+    c_size(w, 1, 'cube')
+    if h ~= nil then
+        c_size(l, 2, 'cube')
+        c_size(h, 3, 'cube')
+        if c ~= nil then c_bool(c, 4, 'cube') end
+    else
+        if l ~= nil then c_bool(l, 2, 'cube') end
+    end
+
+    return Node.new('cube',
+        h and
+        { size = { w, l, h }, center = c == true } or
+        { size = w, center = l == true }
+    )
+end
+
+---@param r number radius
+---@param frag? SCAD.FragOptions
+---@return SCAD.Node
+function SCAD.sphere(r, frag)
+    c_size(r, 1, 'sphere')
+    if frag ~= nil then c_frag(frag, 2, 'sphere') end
+
+    return Node.new('sphere', { r = r, frag = frag })
+end
+
+---@overload fun(h: number, r: number, center?: true, frag?: SCAD.FragOptions): SCAD.Node
+---@param h number height
+---@param r1 number bottom radius
+---@param r2? number top radius
+---@param c? true center
+---@param frag? SCAD.FragOptions
+---@return SCAD.Node
+function SCAD.cylinder(h, r1, r2, c, frag)
+    c_size(h, 1, 'cylinder')
+    if type(r2) == 'number' then
+        c_size(r1, 2, 'cylinder')
+        c_size(r2, 3, 'cylinder')
+        if c ~= nil then c_bool(c, 4, 'cylinder') end
+        if frag ~= nil then c_frag(frag, 5, 'cylinder') end
+    else
+        -- one radius mode (no r2): center = r2==true, frag = c
+        if r2 ~= nil and r2 ~= true then
+            error("cylinder: expected cylinder(h, r[, true][, frag]) or cylinder(h, r1, r2[, true][, frag])", 3)
+        end
+        c_size(r1, 2, 'cylinder')
+        if c ~= nil then c_frag(c, 4, 'cylinder') end
+    end
+
+    return Node.new('cylinder',
+        type(r2) == 'number' and {
+            h      = h,
+            r1     = r1,
+            r2     = r2,
+            center = c == true,
+            frag   = frag,
+        } or {
+            h      = h,
+            r      = r1,
+            center = r2 == true,
+            frag   = c and c ~= true and c or nil,
+        }
+    )
+end
+
+---@param p { points: SCAD.Vec3[], faces: SCAD.Vec3[], convexity?: number }
+---@return SCAD.Node
+function SCAD.polyhedron(p)
+    assert(type(p) == 'table', "polyhedron: expected a table parameter")
+    local pts = p.points
+    assert(type(pts) == 'table' and #pts >= 4, "polyhedron: field 'points' must be an array of at least 4 points")
+    for i, pt in next, pts do
+        assert(type(pt) == 'table' and type(pt[1]) == 'number' and type(pt[2]) == 'number' and type(pt[3]) == 'number',
+            format("polyhedron: points[%d] must be {x, y, z}", i))
+    end
+    assert(type(p.faces) == 'table' and #p.faces > 0, "polyhedron: field 'faces' must be a non-empty array")
+    for i, face in next, p.faces do
+        assert(type(face) == 'table' and #face >= 3,
+            format("polyhedron: faces[%d] must be an array of at least 3 vertex indices", i))
+    end
+    if p.convexity ~= nil then c_num(p.convexity, 'convexity', 'polyhedron') end
+
+    return Node.new('polyhedron', {
+        points    = pts,
+        faces     = p.faces,
+        convexity = p.convexity,
+    })
+end
+
+---@param file string heightmap data file path
+---@param center? true
+---@param convexity? number
+---@return SCAD.Node
+function SCAD.surface(file, center, convexity)
+    c_str(file, 1, 'surface')
+    if center ~= nil then c_bool(center, 2, 'surface') end
+    if convexity ~= nil then c_num(convexity, 3, 'surface') end
+
+    return Node.new('surface', { file = file, center = center == true, convexity = convexity })
+end
+
+--------------------------------------------------------------
+---Primitive Utils
+
+---@param path string file path to import (.stl / .3mf / .dxf / ...)
+---@param convexity? number
+---@return SCAD.Node
+function SCAD.import(path, convexity)
+    c_str(path, 1, 'import')
+    if convexity ~= nil then c_num(convexity, 2, 'import') end
+
+    return Node.new('import', { path = path, convexity = convexity })
+end
+
+--------------------------------------------------------------
+---Boolean / hull / minkowski (wrap child node arrays)
+
+---@alias SCAD.multiNodeOp fun(children: SCAD.Node[]): SCAD.Node
+
+SCAD.union        = nil ---@type SCAD.multiNodeOp
+SCAD.difference   = nil ---@type SCAD.multiNodeOp
+SCAD.intersection = nil ---@type SCAD.multiNodeOp
+SCAD.hull         = nil ---@type SCAD.multiNodeOp
+SCAD.minkowski    = nil ---@type SCAD.multiNodeOp
+
+for _, kind in next, { 'union', 'difference', 'intersection', 'hull', 'minkowski' } do
+    SCAD[kind] = function(children)
+        assert(type(children) == 'table' and #children > 0, kind .. " needs at least one child")
+        for i, child in next, children do c_node(child, i, kind) end
+
+        return Node.new(kind, nil, children)
+    end
+end
+
+--------------------------------------------------------------
+---Node
 
 ---@param op SCAD.enum.Op
 ---@param params? table
@@ -111,19 +341,8 @@ local function copy_table(t)
     return out
 end
 
----[Extra] Deep clone a node to create duplicate copies
----@return SCAD.Node
-function Node:clone()
-    local n = Node.new(self.op, copy_table(self.params))
-    n.transforms = copy_table(self.transforms)
-    if self.children then
-        n.children = {}
-        for i = 1, #self.children do
-            n.children[i] = self.children[i]:clone()
-        end
-    end
-    return n
-end
+--------------------------------------------------------------
+---Node operations
 
 ---@param x number
 ---@param y? number
@@ -294,6 +513,23 @@ function Node:projection(cut)
     return self
 end
 
+--------------------------------------------------------------
+---Node operations EXTRA
+
+---[Extra] Deep clone a node to create duplicate copies
+---@return SCAD.Node
+function Node:clone()
+    local n = Node.new(self.op, copy_table(self.params))
+    n.transforms = copy_table(self.transforms)
+    if self.children then
+        n.children = {}
+        for i = 1, #self.children do
+            n.children[i] = self.children[i]:clone()
+        end
+    end
+    return n
+end
+
 ---[Extra] Shortcut of Projection (cut mode), with optional height specification
 ---@param h? number height
 ---@return SCAD.Node
@@ -338,239 +574,6 @@ function Node:chamfer(d)
     c_num(d, 1, 'chamfer')
 
     return self:offsetD(-d):offsetD(d, true)
-end
-
---------------------------------------------------------------
----2D Primitive
-
----@overload fun(size: number, center?: true): SCAD.Node
----@param w number width
----@param l number length or true (center)
----@param c? true center
----@return SCAD.Node
-function SCAD.square(w, l, c)
-    c_size(w, 1, 'square')
-    if type(l) == 'number' then
-        c_size(l, 2, 'square')
-        if c ~= nil then c_bool(c, 3, 'square') end
-    else
-        if l ~= nil then c_bool(l, 2, 'square') end
-    end
-
-    return Node.new('square',
-        type(l) == 'number' and
-        { size = { w, l }, center = c == true } or
-        { size = w, center = l == true }
-    )
-end
-
----@param r number radius
----@param frag? SCAD.FragOptions
----@return SCAD.Node
-function SCAD.circle(r, frag)
-    c_size(r, 1, 'circle')
-    if frag ~= nil then c_frag(frag, 2, 'circle') end
-
-    return Node.new('circle', { r = r, frag = frag })
-end
-
----@param p { points: SCAD.Vec2[], paths?: number[][], convexity?: number }
----@return SCAD.Node
-function SCAD.polygon(p)
-    assert(type(p) == 'table', "polygon: expected a table parameter")
-    local pts = p.points
-    assert(type(pts) == 'table' and #pts >= 3, "polygon: field 'points' must be an array of at least 3 points")
-    for i, pt in next, pts do
-        assert(type(pt) == 'table' and type(pt[1]) == 'number' and type(pt[2]) == 'number',
-            format("polygon: points[%d] must be {x, y}", i))
-    end
-    if p.convexity ~= nil then c_num(p.convexity, 'convexity', 'polygon') end
-
-    return Node.new('polygon', {
-        points    = pts,
-        paths     = p.paths,
-        convexity = p.convexity,
-    })
-end
-
----@overload fun(str: string): SCAD.Node
----@overload fun(str: string, size: number): SCAD.Node
----@param str string text to render
----@param size? number font size
----@param font? string font name
----@param halign? 'left' | 'center' | 'right'
----@param valign? 'top' | 'center' | 'baseline' | 'bottom'
----@param spacing? number character spacing
----@param direction? 'ltr' | 'rtl' | 'ttb' | 'btt'
----@param language? string
----@param script? string
----@return SCAD.Node
-function SCAD.text(str, size, font, halign, valign, spacing, direction, language, script)
-    c_str(str, 1, 'text')
-    if size ~= nil then c_size(size, 2, 'text') end
-    if font ~= nil then c_str(font, 3, 'text') end
-    if halign ~= nil then c_str(halign, 4, 'text') end
-    if valign ~= nil then c_str(valign, 5, 'text') end
-    if spacing ~= nil then c_num(spacing, 6, 'text') end
-    if direction ~= nil then c_str(direction, 7, 'text') end
-    if language ~= nil then c_str(language, 8, 'text') end
-    if script ~= nil then c_str(script, 9, 'text') end
-
-    return Node.new('text', {
-        text      = str,
-        size      = size,
-        font      = font,
-        halign    = halign,
-        valign    = valign,
-        spacing   = spacing,
-        direction = direction,
-        language  = language,
-        script    = script,
-    })
-end
-
---------------------------------------------------------------
----3D Primitive
-
----@overload fun(size: number, center?: true): SCAD.Node
----@param w number width
----@param l? number length or true (center)
----@param h? number height
----@param c? true center
----@return SCAD.Node
-function SCAD.cube(w, l, h, c)
-    c_size(w, 1, 'cube')
-    if h ~= nil then
-        c_size(l, 2, 'cube')
-        c_size(h, 3, 'cube')
-        if c ~= nil then c_bool(c, 4, 'cube') end
-    else
-        if l ~= nil then c_bool(l, 2, 'cube') end
-    end
-
-    return Node.new('cube',
-        h and
-        { size = { w, l, h }, center = c == true } or
-        { size = w, center = l == true }
-    )
-end
-
----@param r number radius
----@param frag? SCAD.FragOptions
----@return SCAD.Node
-function SCAD.sphere(r, frag)
-    c_size(r, 1, 'sphere')
-    if frag ~= nil then c_frag(frag, 2, 'sphere') end
-
-    return Node.new('sphere', { r = r, frag = frag })
-end
-
----@overload fun(h: number, r: number, center?: true, frag?: SCAD.FragOptions): SCAD.Node
----@param h number height
----@param r1 number bottom radius
----@param r2? number top radius
----@param c? true center
----@param frag? SCAD.FragOptions
----@return SCAD.Node
-function SCAD.cylinder(h, r1, r2, c, frag)
-    c_size(h, 1, 'cylinder')
-    if type(r2) == 'number' then
-        c_size(r1, 2, 'cylinder')
-        c_size(r2, 3, 'cylinder')
-        if c ~= nil then c_bool(c, 4, 'cylinder') end
-        if frag ~= nil then c_frag(frag, 5, 'cylinder') end
-    else
-        -- one radius mode (no r2): center = r2==true, frag = c
-        if r2 ~= nil and r2 ~= true then
-            error("cylinder: expected cylinder(h, r[, true][, frag]) or cylinder(h, r1, r2[, true][, frag])", 3)
-        end
-        c_size(r1, 2, 'cylinder')
-        if c ~= nil then c_frag(c, 4, 'cylinder') end
-    end
-
-    return Node.new('cylinder',
-        type(r2) == 'number' and {
-            h      = h,
-            r1     = r1,
-            r2     = r2,
-            center = c == true,
-            frag   = frag,
-        } or {
-            h      = h,
-            r      = r1,
-            center = r2 == true,
-            frag   = c and c ~= true and c or nil,
-        }
-    )
-end
-
----@param p { points: SCAD.Vec3[], faces: SCAD.Vec3[], convexity?: number }
----@return SCAD.Node
-function SCAD.polyhedron(p)
-    assert(type(p) == 'table', "polyhedron: expected a table parameter")
-    local pts = p.points
-    assert(type(pts) == 'table' and #pts >= 4, "polyhedron: field 'points' must be an array of at least 4 points")
-    for i, pt in next, pts do
-        assert(type(pt) == 'table' and type(pt[1]) == 'number' and type(pt[2]) == 'number' and type(pt[3]) == 'number',
-            format("polyhedron: points[%d] must be {x, y, z}", i))
-    end
-    assert(type(p.faces) == 'table' and #p.faces > 0, "polyhedron: field 'faces' must be a non-empty array")
-    for i, face in next, p.faces do
-        assert(type(face) == 'table' and #face >= 3,
-            format("polyhedron: faces[%d] must be an array of at least 3 vertex indices", i))
-    end
-    if p.convexity ~= nil then c_num(p.convexity, 'convexity', 'polyhedron') end
-
-    return Node.new('polyhedron', {
-        points    = pts,
-        faces     = p.faces,
-        convexity = p.convexity,
-    })
-end
-
----@param file string heightmap data file path
----@param center? true
----@param convexity? number
----@return SCAD.Node
-function SCAD.surface(file, center, convexity)
-    c_str(file, 1, 'surface')
-    if center ~= nil then c_bool(center, 2, 'surface') end
-    if convexity ~= nil then c_num(convexity, 3, 'surface') end
-
-    return Node.new('surface', { file = file, center = center == true, convexity = convexity })
-end
-
---------------------------------------------------------------
----Other Primitive
-
----@param path string file path to import (.stl / .3mf / .dxf / ...)
----@param convexity? number
----@return SCAD.Node
-function SCAD.import(path, convexity)
-    c_str(path, 1, 'import')
-    if convexity ~= nil then c_num(convexity, 2, 'import') end
-
-    return Node.new('import', { path = path, convexity = convexity })
-end
-
---------------------------------------------------------------
----Boolean / hull / minkowski (wrap child node arrays)
-
----@alias SCAD.multiNodeOp fun(children: SCAD.Node[]): SCAD.Node
-
-SCAD.union        = nil ---@type SCAD.multiNodeOp
-SCAD.difference   = nil ---@type SCAD.multiNodeOp
-SCAD.intersection = nil ---@type SCAD.multiNodeOp
-SCAD.hull         = nil ---@type SCAD.multiNodeOp
-SCAD.minkowski    = nil ---@type SCAD.multiNodeOp
-
-for _, kind in next, { 'union', 'difference', 'intersection', 'hull', 'minkowski' } do
-    SCAD[kind] = function(children)
-        assert(type(children) == 'table' and #children > 0, kind .. " needs at least one child")
-        for i, child in next, children do c_node(child, i, kind) end
-
-        return Node.new(kind, nil, children)
-    end
 end
 
 --------------------------------------------------------------
@@ -807,10 +810,10 @@ function SCAD.render(...)
     end
 
     for i = 1, n do
-        if type(buffer[i]) == 'table' and buffer[i].__scad_node then
+        if type(buffer[i]) == 'table' and buffer[i].__index == Node then
             buffer[i] = render_node(buffer[i])
         elseif type(buffer[i]) ~= 'string' then
-            error("render: expected SCAD.Node or string, got " .. type(buffer[i]))
+            error("render: expected SCAD.Node object or scad script string, got " .. type(buffer[i]))
         end
     end
 
