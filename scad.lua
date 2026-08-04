@@ -39,9 +39,13 @@ local function c_size(v, n, f)
     assert(type(v) == 'number' and v > 0,
         format("%s: %s must be a positive number, got %s", f, what(n), tostring(v)))
 end
-local function c_color(v, n, f)
+local function c_num_color(v, n, f)
     assert(type(v) == 'number' and v >= 0 and v <= 1,
         format("%s: %s must be a number in [0,1], got %s", f, what(n), tostring(v)))
+end
+local function c_hex_color(v, n, f)
+    assert(#v == 4 or #v == 5 or #v == 7 or #v == 9,
+        format("%s: %s must be a hex color string (#RGB #RGBA #RRGGBB #RRGGBBAA), got %s", f, what(n), tostring(v)))
 end
 local function c_fn(v, n, f)
     assert(type(v) == 'number' and v >= 0 and v % 1 == 0,
@@ -457,20 +461,35 @@ function Node:multmatrix(m)
     return self
 end
 
+---@overload fun(hex: string, alpha?: number): SCAD.Node
+---@overload fun(color: string, alpha?: number): SCAD.Node
 ---@param r number red (0-1)
 ---@param g? number green (0-1), default r
 ---@param b? number blue (0-1), default r
 ---@param a? number alpha (0-1), default 1
 ---@return SCAD.Node
 function Node:color(r, g, b, a)
-    c_color(r, 1, 'color')
-    if g ~= nil then
-        c_color(g, 2, 'color')
-        c_color(b, 3, 'color')
-        if a ~= nil then c_color(a, 4, 'color') end
+    if type(r) == 'string' then
+        if r:match("^#?%x+$") then
+            if r:sub(1, 1) ~= '#' then r = '#' .. r end
+            c_hex_color(r, 1, 'color')
+        else
+            if g ~= nil then c_num_color(g, 2, 'color') end
+        end
+    else
+        c_num_color(r, 1, 'color')
+        if g ~= nil then
+            c_num_color(g, 2, 'color')
+            c_num_color(b, 3, 'color')
+            if a ~= nil then c_num_color(a, 4, 'color') end
+        end
     end
 
-    ins(self.transforms, { op = 'color', v = { r, g or r, b or r, a } })
+    if type(r) == 'number' then
+        ins(self.transforms, { op = 'color', v = { r, g or r, b or r, a } })
+    else
+        ins(self.transforms, { op = 'color', hex = r, alpha = g })
+    end
     return self
 end
 
@@ -810,7 +829,9 @@ do
         color = function(tr)
             return buildT {
                 "color",
-                fmt_vec(tr.v),
+                tr.v and fmt_vec(tr.v) or false,
+                tr.hex and format('"%s"', tr.hex) or false,
+                tr.alpha and "alpha=" .. fmt(tr.alpha) or false,
             }
         end,
         linear_extrude = function(tr)
