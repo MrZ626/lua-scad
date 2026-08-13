@@ -388,7 +388,7 @@ end
 ---@param tr SCAD.Transform
 ---@return SCAD.Node
 function Node:addTransform(tr)
-    self:addTransform(tr)
+    ins(self.transforms, tr)
     return self
 end
 
@@ -1008,6 +1008,29 @@ function SCAD.install()
         end
     end
     return SCAD
+end
+
+---Hint for IDE
+if false then
+    _G.union = SCAD.union
+    _G.difference = SCAD.difference
+    _G.intersection = SCAD.intersection
+    _G.hull = SCAD.hull
+    _G.minkowski = SCAD.minkowski
+    _G.fill = SCAD.fill
+    _G.render = SCAD.render
+
+    _G.square = SCAD.square
+    _G.circle = SCAD.circle
+    _G.polygon = SCAD.polygon
+    _G.text = SCAD.text
+    _G.cube = SCAD.cube
+    _G.sphere = SCAD.sphere
+    _G.cylinder = SCAD.cylinder
+    _G.polyhedron = SCAD.polyhedron
+    _G.surface = SCAD.surface
+    _G.import = SCAD.import
+    _G.export = SCAD.export
 end
 
 return SCAD
