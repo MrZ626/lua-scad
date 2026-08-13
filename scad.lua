@@ -113,10 +113,10 @@ end
 --------------------------------------------------------------
 ---Primitive 2D
 
----@overload fun(size: number, center?: true): SCAD.Node
+---@overload fun(size: number, center?: boolean): SCAD.Node
 ---@param w number width
----@param l number length or true (center)
----@param c? true center
+---@param l number length (or center)
+---@param c? boolean center
 ---@return SCAD.Node
 function SCAD.square(w, l, c)
     c_size(w, 1, 'square')
@@ -211,11 +211,11 @@ end
 --------------------------------------------------------------
 ---Primitive 3D
 
----@overload fun(size: number, center?: true): SCAD.Node
+---@overload fun(size: number, center?: boolean): SCAD.Node
 ---@param w number width
----@param l? number length or true (center)
+---@param l? number length (or center)
 ---@param h? number height
----@param c? true center
+---@param c? boolean center
 ---@return SCAD.Node
 function SCAD.cube(w, l, h, c)
     c_size(w, 1, 'cube')
@@ -244,11 +244,11 @@ function SCAD.sphere(r, frag)
     return Node.new('sphere', { r = r, frag = frag })
 end
 
----@overload fun(h: number, r: number, center?: true, frag?: SCAD.FragOptions): SCAD.Node
+---@overload fun(h: number, r: number, center?: boolean, frag?: SCAD.FragOptions): SCAD.Node
 ---@param h number height
 ---@param r1 number bottom radius
 ---@param r2? number top radius
----@param c? true center
+---@param c? boolean center
 ---@param frag? SCAD.FragOptions
 ---@return SCAD.Node
 function SCAD.cylinder(h, r1, r2, c, frag)
@@ -312,7 +312,7 @@ function SCAD.polyhedron(points, faces, convexity)
 end
 
 ---@param file string heightmap data file path
----@param center? true
+---@param center? boolean
 ---@param convexity? number
 ---@return SCAD.Node
 function SCAD.surface(file, center, convexity)
@@ -527,7 +527,7 @@ function Node:color(r, g, b, a)
     return self
 end
 
----@param params { h: number, center?: true, twist?: number, slices?: number, scale?: number | SCAD.Vec2, convexity?: number, frag?: SCAD.FragOptions }
+---@param params { h: number, center?: boolean, twist?: number, slices?: number, scale?: number | SCAD.Vec2, convexity?: number, frag?: SCAD.FragOptions }
 ---@return SCAD.Node
 function Node:linear_extrude(params)
     params = params or {}
@@ -583,7 +583,7 @@ end
 
 ---delta-branch of offset
 ---@param delta number offset distance
----@param chamfer? true enable chamfer
+---@param chamfer? boolean enable chamfer
 ---@return SCAD.Node
 function Node:offsetD(delta, chamfer)
     c_num(delta, 1, 'offsetD')
@@ -593,7 +593,7 @@ function Node:offsetD(delta, chamfer)
     return self
 end
 
----@param cut? true
+---@param cut? boolean
 ---@return SCAD.Node
 function Node:projection(cut)
     if cut ~= nil then c_bool(cut, 1, 'projection') end
