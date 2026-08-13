@@ -43,6 +43,14 @@ local function c_size(v, n, f)
     assert(type(v) == 'number' and v > 0,
         format("%s: %s must be a positive number, got %s", f, what(n), tostring(v)))
 end
+local function c_nonneg(v, n, f)
+    assert(type(v) == 'number' and v >= 0,
+        format("%s: %s must be a non-negative number, got %s", f, what(n), tostring(v)))
+end
+local function c_pint(v, n, f)
+    assert(type(v) == 'number' and v > 0 and v % 1 == 0,
+        format("%s: %s must be a positive integer, got %s", f, what(n), tostring(v)))
+end
 local function c_num_color(v, n, f)
     assert(type(v) == 'number' and v >= 0 and v <= 1,
         format("%s: %s must be a number in [0,1], got %s", f, what(n), tostring(v)))
@@ -246,8 +254,9 @@ end
 function SCAD.cylinder(h, r1, r2, c, frag)
     c_size(h, 1, 'cylinder')
     if type(r2) == 'number' then
-        c_size(r1, 2, 'cylinder')
-        c_size(r2, 3, 'cylinder')
+        c_nonneg(r1, 2, 'cylinder')
+        c_nonneg(r2, 3, 'cylinder')
+        assert(not (r1 == 0 and r2 == 0), "cylinder: r1 and r2 must not both be zero")
         if c ~= nil then c_bool(c, 4, 'cylinder') end
         if frag ~= nil then c_frag(frag, 5, 'cylinder') end
     else
@@ -641,7 +650,7 @@ end
 ---@param dz? number z step
 ---@return SCAD.Node
 function Node:array(count, dx, dy, dz)
-    c_size(count, 1, 'array')
+    c_pint(count, 1, 'array')
     c_num(dx, 2, 'array')
     if dy ~= nil then
         c_num(dy, 3, 'array')
@@ -660,7 +669,7 @@ end
 ---@param az? number axis vector z
 ---@return SCAD.Node
 function Node:rotate_array(count, angle, ax, ay, az)
-    c_size(count, 1, 'rotate_array')
+    c_pint(count, 1, 'rotate_array')
     c_num(angle, 2, 'rotate_array')
     if ax ~= nil then
         c_num(ax, 3, 'rotate_array')
