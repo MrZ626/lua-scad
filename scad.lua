@@ -253,18 +253,14 @@ end
 ---@return SCAD.Node
 function SCAD.cylinder(h, r1, r2, c, frag)
     c_size(h, 1, 'cylinder')
+    c_nonneg(r1, 2, 'cylinder')
     if type(r2) == 'number' then
-        c_nonneg(r1, 2, 'cylinder')
         c_nonneg(r2, 3, 'cylinder')
-        assert(not (r1 == 0 and r2 == 0), "cylinder: r1 and r2 must not both be zero")
         if c ~= nil then c_bool(c, 4, 'cylinder') end
         if frag ~= nil then c_frag(frag, 5, 'cylinder') end
     else
         -- one radius mode (no r2): center = r2==true, frag = c
-        if r2 ~= nil and r2 ~= true then
-            error("cylinder: expected cylinder(h, r[, true][, frag]) or cylinder(h, r1, r2[, true][, frag])", 3)
-        end
-        c_size(r1, 2, 'cylinder')
+        if r2 ~= nil then c_bool(r2, 3, 'cylinder') end
         if c ~= nil then c_frag(c, 4, 'cylinder') end
     end
 
