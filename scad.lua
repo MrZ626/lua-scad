@@ -390,11 +390,248 @@ function Node:clone()
     return n
 end
 
+---@private
 ---@param tr SCAD.Transform
 ---@return SCAD.Node
 function Node:addTransform(tr)
     ins(self.transforms, tr)
     return self
+end
+
+---@return string `pr(p1, p2, ...);`
+local function buildP(list)
+    for i = #list, 1, -1 do if list[i] == false then rem(list, i) end end
+    return rem(list, 1) .. "(" .. concat(list, ", ") .. ");"
+end
+local primitive_templates = {
+    cube = function(p)
+        return buildP {
+            "cube",
+            type(p.size) == 'number' and fmt(p.size) or fmt_vec(p.size),
+            p.center and 'center=true' or false,
+        }
+    end,
+    square = function(p)
+        return buildP {
+            "square",
+            type(p.size) == 'number' and fmt(p.size) or fmt_vec(p.size),
+            p.center and 'center=true' or false,
+        }
+    end,
+    cylinder = function(p)
+        return buildP {
+            "cylinder",
+            "h=" .. fmt(p.h),
+            p.r and "r=" .. fmt(p.r) or false,
+            p.r1 and "r1=" .. fmt(p.r1) or false,
+            p.r2 and "r2=" .. fmt(p.r2) or false,
+            p.center and "center=true" or false,
+            p.frag and p.frag.fa and "$fa=" .. fmt(p.frag.fa) or false,
+            p.frag and p.frag.fs and "$fs=" .. fmt(p.frag.fs) or false,
+            p.frag and p.frag.fn and "$fn=" .. p.frag.fn or false,
+        }
+    end,
+    sphere = function(p)
+        return buildP {
+            "sphere",
+            "r=" .. fmt(p.r),
+            p.frag and p.frag.fa and "$fa=" .. fmt(p.frag.fa) or false,
+            p.frag and p.frag.fs and "$fs=" .. fmt(p.frag.fs) or false,
+            p.frag and p.frag.fn and "$fn=" .. p.frag.fn or false,
+        }
+    end,
+    circle = function(p)
+        return buildP {
+            "circle",
+            "r=" .. fmt(p.r),
+            p.frag and p.frag.fa and "$fa=" .. fmt(p.frag.fa) or false,
+            p.frag and p.frag.fs and "$fs=" .. fmt(p.frag.fs) or false,
+            p.frag and p.frag.fn and "$fn=" .. p.frag.fn or false,
+        }
+    end,
+    text = function(p)
+        return buildP {
+            "text",
+            format('"%s"', string.gsub(p.text, [["]], [[\"]])),
+            p.size and "size=" .. fmt(p.size) or false,
+            p.font and format('font="%s"', p.font) or false,
+            p.halign and format('halign="%s"', p.halign) or false,
+            p.valign and format('valign="%s"', p.valign) or false,
+            p.spacing and "spacing=" .. fmt(p.spacing) or false,
+            p.direction and format('direction="%s"', p.direction) or false,
+            p.language and format('language="%s"', p.language) or false,
+            p.script and format('script="%s"', p.script) or false,
+        }
+    end,
+    polygon = function(p)
+        return buildP {
+            "polygon",
+            "points=" .. fmt_mat(p.points),
+            p.paths and "paths=" .. fmt_mat(p.paths) or false,
+            p.convexity and "convexity=" .. p.convexity or false,
+        }
+    end,
+    polyhedron = function(p)
+        return buildP {
+            "polyhedron",
+            "points=" .. fmt_mat(p.points),
+            "faces=" .. fmt_mat(p.faces),
+            p.convexity and "convexity=" .. p.convexity or false,
+        }
+    end,
+    import = function(p)
+        return buildP {
+            "import",
+            format('"%s"', p.path),
+            p.convexity and "convexity=" .. p.convexity or false,
+        }
+    end,
+    surface = function(p)
+        return buildP {
+            "surface",
+            format('file="%s"', p.file),
+            p.center and "center=true" or false,
+            p.convexity and "convexity=" .. p.convexity or false,
+        }
+    end,
+}
+---@return string `tr(p1, p2, ...)`
+local function buildT(list)
+    for i = #list, 1, -1 do if list[i] == false then rem(list, i) end end
+    return rem(list, 1) .. "(" .. concat(list, ", ") .. ")"
+end
+local transform_templates = {
+    translate = function(tr)
+        return buildT {
+            "translate",
+            fmt_vec(tr.v),
+        }
+    end,
+    scale = function(tr)
+        return buildT {
+            "scale",
+            type(tr.v) == 'number' and fmt(tr.v) or fmt_vec(tr.v),
+        }
+    end,
+    rotate = function(tr)
+        return buildT {
+            "rotate",
+            #tr.v == 3 and fmt_vec(tr.v) or fmt(tr.v[1]),
+            #tr.v == 4 and fmt_vec({ tr.v[2], tr.v[3], tr.v[4] }) or false,
+        }
+    end,
+    mirror = function(tr)
+        return buildT {
+            "mirror",
+            fmt_vec(tr.v),
+        }
+    end,
+    resize = function(tr)
+        return buildT {
+            "resize",
+            fmt_vec(tr.v),
+            tr.auto ~= nil and "auto=" .. tostring(tr.auto) or false,
+            tr.convexity ~= nil and "convexity=" .. fmt(tr.convexity) or false,
+        }
+    end,
+    multmatrix = function(tr)
+        return buildT {
+            "multmatrix",
+            "m=" .. fmt_mat(tr.m),
+        }
+    end,
+    color = function(tr)
+        return buildT {
+            "color",
+            tr.v and fmt_vec(tr.v) or false,
+            tr.hex and format('"%s"', tr.hex) or false,
+            tr.alpha and "alpha=" .. fmt(tr.alpha) or false,
+        }
+    end,
+    linear_extrude = function(tr)
+        return buildT {
+            "linear_extrude",
+            fmt(tr.h),
+            tr.center and "center=true" or false,
+            tr.twist and "twist=" .. fmt(tr.twist) or false,
+            tr.slices and "slices=" .. tr.slices or false,
+            tr.scale and ("scale=" .. (type(tr.scale) == 'table' and fmt_vec(tr.scale) or fmt(tr.scale))) or false,
+            tr.convexity and "convexity=" .. tr.convexity or false,
+            tr.frag and tr.frag.fa and "$fa=" .. fmt(tr.frag.fa) or false,
+            tr.frag and tr.frag.fs and "$fs=" .. fmt(tr.frag.fs) or false,
+            tr.frag and tr.frag.fn and "$fn=" .. tr.frag.fn or false,
+        }
+    end,
+    rotate_extrude = function(tr)
+        return buildT {
+            "rotate_extrude",
+            tr.angle and "angle=" .. fmt(tr.angle) or false,
+            tr.convexity and "convexity=" .. tr.convexity or false,
+            tr.frag and tr.frag.fa and "$fa=" .. fmt(tr.frag.fa) or false,
+            tr.frag and tr.frag.fs and "$fs=" .. fmt(tr.frag.fs) or false,
+            tr.frag and tr.frag.fn and "$fn=" .. tr.frag.fn or false,
+        }
+    end,
+    offset = function(tr)
+        return buildT {
+            "offset",
+            tr.r and "r=" .. fmt(tr.r) or false,
+            tr.delta and "delta=" .. fmt(tr.delta) or false,
+            tr.chamfer and "chamfer=true" or false,
+        }
+    end,
+    projection = function(tr)
+        return buildT {
+            "projection",
+            tr.cut and "cut=true" or false,
+        }
+    end,
+    array = function(tr)
+        return "for (i = [0:" .. (tr.count - 1) .. "]) " ..
+            buildT {
+                "translate",
+                fmt_vec(tr.step) .. " * i"
+            }
+    end,
+    rotate_array = function(tr)
+        return "for (i = [0:" .. (tr.count - 1) .. "]) " ..
+            buildT {
+                "rotate",
+                fmt(tr.angle) .. " * i",
+                tr.axis and fmt_vec(tr.axis) or false,
+            }
+    end,
+}
+local function export_expand_children(n)
+    local parts = {}
+    for i, child in next, n.children do
+        parts[i] = child:export()
+    end
+    return n.op .. "() {\n" .. concat(parts, "\n") .. "\n}"
+end
+local modifier_prefix = {
+    debug      = '#',
+    background = '%',
+    root       = '!',
+    disable    = '*',
+}
+local function wrap_transforms(n, code)
+    for _, tr in next, n.transforms do
+        local prefix = modifier_prefix[tr.op]
+        if prefix then
+            code = prefix .. ' ' .. code
+        else
+            code = transform_templates[tr.op](tr) .. " {\n" .. code .. "\n}"
+        end
+    end
+    return code
+end
+---@private
+---@return string scadScript
+function Node:export()
+    if self.children then return wrap_transforms(self, export_expand_children(self)) end
+    assert(primitive_templates[self.op], "export: unknown primitive type: " .. self.op)
+    return wrap_transforms(self, primitive_templates[self.op](self.params))
 end
 
 --------------------------------------------------------------
@@ -698,261 +935,17 @@ end
 --------------------------------------------------------------
 ---Rendering
 
-local export_nodes
-do
-    ---Return `pr(p1, p2, ...);`
-    local function buildP(list)
-        for i = #list, 1, -1 do if list[i] == false then rem(list, i) end end
-        return rem(list, 1) .. "(" .. concat(list, ", ") .. ");"
-    end
-    local primitive_templates = {
-        cube = function(p)
-            return buildP {
-                "cube",
-                type(p.size) == 'number' and fmt(p.size) or fmt_vec(p.size),
-                p.center and 'center=true' or false,
-            }
-        end,
-        square = function(p)
-            return buildP {
-                "square",
-                type(p.size) == 'number' and fmt(p.size) or fmt_vec(p.size),
-                p.center and 'center=true' or false,
-            }
-        end,
-        cylinder = function(p)
-            return buildP {
-                "cylinder",
-                "h=" .. fmt(p.h),
-                p.r and "r=" .. fmt(p.r) or false,
-                p.r1 and "r1=" .. fmt(p.r1) or false,
-                p.r2 and "r2=" .. fmt(p.r2) or false,
-                p.center and "center=true" or false,
-                p.frag and p.frag.fa and "$fa=" .. fmt(p.frag.fa) or false,
-                p.frag and p.frag.fs and "$fs=" .. fmt(p.frag.fs) or false,
-                p.frag and p.frag.fn and "$fn=" .. p.frag.fn or false,
-            }
-        end,
-        sphere = function(p)
-            return buildP {
-                "sphere",
-                "r=" .. fmt(p.r),
-                p.frag and p.frag.fa and "$fa=" .. fmt(p.frag.fa) or false,
-                p.frag and p.frag.fs and "$fs=" .. fmt(p.frag.fs) or false,
-                p.frag and p.frag.fn and "$fn=" .. p.frag.fn or false,
-            }
-        end,
-        circle = function(p)
-            return buildP {
-                "circle",
-                "r=" .. fmt(p.r),
-                p.frag and p.frag.fa and "$fa=" .. fmt(p.frag.fa) or false,
-                p.frag and p.frag.fs and "$fs=" .. fmt(p.frag.fs) or false,
-                p.frag and p.frag.fn and "$fn=" .. p.frag.fn or false,
-            }
-        end,
-        text = function(p)
-            return buildP {
-                "text",
-                format('"%s"', string.gsub(p.text, [["]], [[\"]])),
-                p.size and "size=" .. fmt(p.size) or false,
-                p.font and format('font="%s"', p.font) or false,
-                p.halign and format('halign="%s"', p.halign) or false,
-                p.valign and format('valign="%s"', p.valign) or false,
-                p.spacing and "spacing=" .. fmt(p.spacing) or false,
-                p.direction and format('direction="%s"', p.direction) or false,
-                p.language and format('language="%s"', p.language) or false,
-                p.script and format('script="%s"', p.script) or false,
-            }
-        end,
-        polygon = function(p)
-            return buildP {
-                "polygon",
-                "points=" .. fmt_mat(p.points),
-                p.paths and "paths=" .. fmt_mat(p.paths) or false,
-                p.convexity and "convexity=" .. p.convexity or false,
-            }
-        end,
-        polyhedron = function(p)
-            return buildP {
-                "polyhedron",
-                "points=" .. fmt_mat(p.points),
-                "faces=" .. fmt_mat(p.faces),
-                p.convexity and "convexity=" .. p.convexity or false,
-            }
-        end,
-        import = function(p)
-            return buildP {
-                "import",
-                format('"%s"', p.path),
-                p.convexity and "convexity=" .. p.convexity or false,
-            }
-        end,
-        surface = function(p)
-            return buildP {
-                "surface",
-                format('file="%s"', p.file),
-                p.center and "center=true" or false,
-                p.convexity and "convexity=" .. p.convexity or false,
-            }
-        end,
-    }
-    ---Return `tr(p1, p2, ...)`
-    local function buildT(list)
-        for i = #list, 1, -1 do if list[i] == false then rem(list, i) end end
-        return rem(list, 1) .. "(" .. concat(list, ", ") .. ")"
-    end
-    local transform_templates = {
-        translate = function(tr)
-            return buildT {
-                "translate",
-                fmt_vec(tr.v),
-            }
-        end,
-        scale = function(tr)
-            return buildT {
-                "scale",
-                type(tr.v) == 'number' and fmt(tr.v) or fmt_vec(tr.v),
-            }
-        end,
-        rotate = function(tr)
-            return buildT {
-                "rotate",
-                #tr.v == 3 and fmt_vec(tr.v) or fmt(tr.v[1]),
-                #tr.v == 4 and fmt_vec({ tr.v[2], tr.v[3], tr.v[4] }) or false,
-            }
-        end,
-        mirror = function(tr)
-            return buildT {
-                "mirror",
-                fmt_vec(tr.v),
-            }
-        end,
-        resize = function(tr)
-            return buildT {
-                "resize",
-                fmt_vec(tr.v),
-                tr.auto ~= nil and "auto=" .. tostring(tr.auto) or false,
-                tr.convexity ~= nil and "convexity=" .. fmt(tr.convexity) or false,
-            }
-        end,
-        multmatrix = function(tr)
-            return buildT {
-                "multmatrix",
-                "m=" .. fmt_mat(tr.m),
-            }
-        end,
-        color = function(tr)
-            return buildT {
-                "color",
-                tr.v and fmt_vec(tr.v) or false,
-                tr.hex and format('"%s"', tr.hex) or false,
-                tr.alpha and "alpha=" .. fmt(tr.alpha) or false,
-            }
-        end,
-        linear_extrude = function(tr)
-            return buildT {
-                "linear_extrude",
-                fmt(tr.h),
-                tr.center and "center=true" or false,
-                tr.twist and "twist=" .. fmt(tr.twist) or false,
-                tr.slices and "slices=" .. tr.slices or false,
-                tr.scale and ("scale=" .. (type(tr.scale) == 'table' and fmt_vec(tr.scale) or fmt(tr.scale))) or false,
-                tr.convexity and "convexity=" .. tr.convexity or false,
-                tr.frag and tr.frag.fa and "$fa=" .. fmt(tr.frag.fa) or false,
-                tr.frag and tr.frag.fs and "$fs=" .. fmt(tr.frag.fs) or false,
-                tr.frag and tr.frag.fn and "$fn=" .. tr.frag.fn or false,
-            }
-        end,
-        rotate_extrude = function(tr)
-            return buildT {
-                "rotate_extrude",
-                tr.angle and "angle=" .. fmt(tr.angle) or false,
-                tr.convexity and "convexity=" .. tr.convexity or false,
-                tr.frag and tr.frag.fa and "$fa=" .. fmt(tr.frag.fa) or false,
-                tr.frag and tr.frag.fs and "$fs=" .. fmt(tr.frag.fs) or false,
-                tr.frag and tr.frag.fn and "$fn=" .. tr.frag.fn or false,
-            }
-        end,
-        offset = function(tr)
-            return buildT {
-                "offset",
-                tr.r and "r=" .. fmt(tr.r) or false,
-                tr.delta and "delta=" .. fmt(tr.delta) or false,
-                tr.chamfer and "chamfer=true" or false,
-            }
-        end,
-        projection = function(tr)
-            return buildT {
-                "projection",
-                tr.cut and "cut=true" or false,
-            }
-        end,
-        array = function(tr)
-            return "for (i = [0:" .. (tr.count - 1) .. "]) " ..
-                buildT {
-                    "translate",
-                    fmt_vec(tr.step) .. " * i"
-                }
-        end,
-        rotate_array = function(tr)
-            return "for (i = [0:" .. (tr.count - 1) .. "]) " ..
-                buildT {
-                    "rotate",
-                    fmt(tr.angle) .. " * i",
-                    tr.axis and fmt_vec(tr.axis) or false,
-                }
-        end,
-    }
+local function export_nodes(...)
+    local buffer = { ... }
 
-    ---@type function
-    local export_node
-
-    local function export_expand_children(n)
-        local parts = {}
-        for i, child in next, n.children do
-            parts[i] = export_node(child)
+    for i = 1, #buffer do
+        if type(buffer[i]) == 'table' and buffer[i].__index == Node then
+            buffer[i] = buffer[i]:export()
+        elseif type(buffer[i]) ~= 'string' then
+            error("preview/export: expected SCAD.Node object or scad script string, got " .. type(buffer[i]))
         end
-        return n.op .. "() {\n" .. concat(parts, "\n") .. "\n}"
     end
-
-    local modifier_prefix = {
-        debug      = '#',
-        background = '%',
-        root       = '!',
-        disable    = '*',
-    }
-
-    local function wrap_transforms(n, code)
-        for _, tr in next, n.transforms do
-            local prefix = modifier_prefix[tr.op]
-            if prefix then
-                code = prefix .. ' ' .. code
-            else
-                code = transform_templates[tr.op](tr) .. " {\n" .. code .. "\n}"
-            end
-        end
-        return code
-    end
-
-    function export_node(n)
-        if n.children then return wrap_transforms(n, export_expand_children(n)) end
-        return wrap_transforms(n,
-        (primitive_templates[n.op] or error("export: unknown primitive type: " .. n.op))(n.params))
-    end
-
-    function export_nodes(...)
-        local buffer = { ... }
-
-        for i = 1, #buffer do
-            if type(buffer[i]) == 'table' and buffer[i].__index == Node then
-                buffer[i] = export_node(buffer[i])
-            elseif type(buffer[i]) ~= 'string' then
-                error("export: expected SCAD.Node object or scad script string, got " .. type(buffer[i]))
-            end
-        end
-        return buffer
-    end
+    return buffer
 end
 
 ---Preview in openscad
