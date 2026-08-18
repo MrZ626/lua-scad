@@ -698,7 +698,7 @@ end
 --------------------------------------------------------------
 ---Rendering
 
-local export_node
+local export_nodes
 do
     ---Return `pr(p1, p2, ...);`
     local function buildP(list)
@@ -905,6 +905,9 @@ do
         end,
     }
 
+    ---@type function
+    local export_node
+
     local function export_expand_children(n)
         local parts = {}
         for i, child in next, n.children do
@@ -934,71 +937,61 @@ do
 
     function export_node(n)
         if n.children then return wrap_transforms(n, export_expand_children(n)) end
-        return wrap_transforms(n, (primitive_templates[n.op] or error("unknown primitive type: " .. n.op))(n.params))
+        return wrap_transforms(n,
+        (primitive_templates[n.op] or error("export: unknown primitive type: " .. n.op))(n.params))
+    end
+
+    function export_nodes(...)
+        local buffer = { ... }
+
+        for i = 1, #buffer do
+            if type(buffer[i]) == 'table' and buffer[i].__index == Node then
+                buffer[i] = export_node(buffer[i])
+            elseif type(buffer[i]) ~= 'string' then
+                error("export: expected SCAD.Node object or scad script string, got " .. type(buffer[i]))
+            end
+        end
+        return buffer
     end
 end
 
----@overload fun(...: (SCAD.Node | string)): string
----@overload fun(...: (SCAD.Node | string), path: string)
----@overload fun(...: (SCAD.Node | string), preview: true)
-function SCAD.export(...)
-    local n = select('#', ...)
+---Preview in openscad
+---@vararg SCAD.Node | string
+function SCAD.preview(...)
+    local code = concat(export_nodes(...), "\n\n")
+    io.open('_preview.scad', 'w'):write(code):close()
+    os.execute('"openscad" "_preview.scad"')
+end
 
-    local mode
-    local lastParam = select(n, ...)
-    if lastParam == true then
-        mode = 'preview'
-    elseif type(lastParam) == 'string' and lastParam:match('%.scad$') then
-        mode = 'scad'
-    elseif type(lastParam) == 'string' and lastParam:match('%.stl$') then
-        mode = 'stl'
-    else
-        mode = 'raw'
-    end
+---Export to scad code string, or write to .scad file, or render to .stl file with openscad
+---@overload fun(...: SCAD.Node | string): string
+---@param path string *.scad or *.stl
+---@vararg SCAD.Node | string
+function SCAD.export(path, ...)
+    if type(path) == 'table' then return concat(export_nodes(path, ...), "\n\n") end
 
-    local buffer = { ... }
-
-    if mode ~= 'raw' then
-        buffer[n] = nil
-        n = n - 1
-    end
-
-    for i = 1, n do
-        if type(buffer[i]) == 'table' and buffer[i].__index == Node then
-            buffer[i] = export_node(buffer[i])
-        elseif type(buffer[i]) ~= 'string' then
-            error("export: expected SCAD.Node object or scad script string, got " .. type(buffer[i]))
-        end
-    end
-
-    local code = concat(buffer, "\n\n")
-
-    if mode == 'raw' then
-        -- Raw string
-        return code
-    elseif mode == 'preview' then
-        -- Preview in openscad
-        io.open('_preview.scad', 'w'):write(code):close()
-        os.execute('"openscad" "_preview.scad"')
-    elseif mode == 'scad' then
+    assert(type(path) == 'string', "export: expected string path, got " .. type(path))
+    local code = concat(export_nodes(...), "\n\n")
+    if path:match('%.scad$') then
         -- Write to .scad file
-        io.open(lastParam, 'w'):write(code):close()
-    elseif mode == 'stl' then
+        io.open(path, 'w'):write(code):close()
+    elseif path:match('%.stl$') then
         -- Render & write to .stl file with openscad
         local tmp = os.tmpname() .. '.stl'
         local p = io.popen(format('"openscad" - -o "%s" 2>/dev/null', tmp), 'w')
+        assert(p, "export: failed to start process (openscad)")
         p:write(code)
         local ok = p:close()
         if ok then
             local src = assert(io.open(tmp, 'rb'))
             local data = src:read('a')
             src:close()
-            io.open(lastParam, 'wb'):write(data):close()
+            io.open(path, 'wb'):write(data):close()
         end
         os.remove(tmp)
         assert(ok, "openscad render failed")
     else
-        error("?")
+        error("export: file extension must be .scad or .stl")
     end
 end
 
@@ -1035,6 +1028,8 @@ if false then
     _G.polyhedron = SCAD.polyhedron
     _G.surface = SCAD.surface
     _G.import = SCAD.import
+
+    _G.preview = SCAD.preview
     _G.export = SCAD.export
 end
 
