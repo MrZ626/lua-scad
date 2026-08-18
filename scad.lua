@@ -754,7 +754,7 @@ do
         text = function(p)
             return buildP {
                 "text",
-                format('"%s"', p.text),
+                format('"%s"', string.gsub(p.text, [["]], [[\"]])),
                 p.size and "size=" .. fmt(p.size) or false,
                 p.font and format('font="%s"', p.font) or false,
                 p.halign and format('halign="%s"', p.halign) or false,
